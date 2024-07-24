@@ -93,23 +93,7 @@ def ensure_all_behaviors(frequencies: dict, behavior_labels: dict) -> None:
         if key not in frequencies:
             frequencies[key] = 0
 
-
 def calculate_z_score_differences_v2(baseline_frequencies: dict, post_injection_frequencies: dict) -> dict:
-    """
-    Calculate the Z-score differences for each behavior between baseline and post-injection.
-
-    Parameters:
-    ----------
-    baseline_frequencies : dict
-        Dictionary containing the baseline behavior frequencies.
-    post_injection_frequencies : dict
-        Dictionary containing the post-injection behavior frequencies.
-
-    Returns:
-    -------
-    dict
-        Dictionary containing the Z-score differences for each behavior.
-    """
     all_frequencies = list(baseline_frequencies.values()) + list(post_injection_frequencies.values())
     mean_freq = np.mean(all_frequencies)
     std_freq = np.std(all_frequencies)
@@ -119,3 +103,4 @@ def calculate_z_score_differences_v2(baseline_frequencies: dict, post_injection_
 
     z_score_differences = {behavior: z_post_injection_frequencies[behavior] - z_baseline_frequencies[behavior] for behavior in baseline_frequencies.keys()}
     return z_score_differences
+
