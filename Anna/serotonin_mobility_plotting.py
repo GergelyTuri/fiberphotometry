@@ -64,3 +64,27 @@ def plot_velocities(velocities, labels, title="Average Velocity Comparison", xla
     plt.ylabel(ylabel)
     plt.title(title)
     plt.show()
+def plot_distances(distances, labels, title="Total Distance Traveled Comparison", xlabel="Files", ylabel="Total Distance Traveled", colors=None):
+    """
+    Plot a bar graph of distances traveled.
+
+    Parameters:
+    ----------
+    distances : list of float
+        List of total distances to plot.
+    labels : list of str
+        Corresponding labels for the distances.
+    title : str, optional
+        Title of the plot (default is "Total Distance Traveled Comparison").
+    xlabel : str, optional
+        Label for the x-axis (default is "Files").
+    ylabel : str, optional
+        Label for the y-axis (default is "Total Distance Traveled").
+    colors : list of str, optional
+        List of colors for the bars (default is None, which uses default colors).
+    """
+    plt.figure(figsize=(8, 6))
+    plt.bar(labels, distances, color=colors if colors else ['blue', 'orange'])
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(titl

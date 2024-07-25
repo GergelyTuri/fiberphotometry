@@ -99,3 +99,36 @@ def load_and_process_file(file_path, frame_rate=30, likelihood_threshold=0.8):
     mean_velocity = velocity.mean()
 
     return mean_velocity
+def calculate_total_distance(file_path, likelihood_threshold=0.8):
+    """
+    Load and process HDF file to calculate total distance traveled.
+
+    Parameters:
+    ----------
+    file_path : str
+        Path to the HDF file.
+    likelihood_threshold : float, optional
+        Threshold for likelihood to filter out low-confidence points (default is 0.8).
+
+    Returns:
+    -------
+    float
+        Total distance traveled calculated from the file.
+    """
+    beh_df = pd.read_hdf(file_path)
+
+    # Extract coordinates
+    x_coords = beh_df[(beh_df.columns.values[0][0], 'back1', 'x')]
+    y_coords = beh_df[(beh_df.columns.values[0][0], 'back1', 'y')]
+
+    # Remove noisy points where both x and y are zero
+    valid_points = (x_coords > 0) & (y_coords > 0)
+    likelihood_filter = beh_df[('DLC_resnet50_pcb_testJul2shuffle1_1030000', 'back1', 'likelihood')] > likelihood_threshold
+    x_coords = x_coords[valid_points & likelihood_filter]
+    y_coords = y_coords[valid_points & likelihood_filter]
+
+    # Compute distance moved
+    dist_moved = np.sqrt(np.diff(x_coords)**2 + np.diff(y_coords)**2)
+    total_distance = dist_moved.sum()
+
+    return total_distance
