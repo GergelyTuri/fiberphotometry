@@ -1,5 +1,6 @@
 import pandas as pd
 from scipy.stats import ttest_ind
+import numpy as np
 
 def load_and_merge_data(control_mobility_paths, control_serotonin_paths, pcb_mobility_paths, pcb_serotonin_paths):
     def load_data(paths):
