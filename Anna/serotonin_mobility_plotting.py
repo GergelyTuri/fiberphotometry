@@ -37,3 +37,30 @@ def plot_serotonin_levels(averages, overall_averages):
 
     plt.tight_layout()
     plt.show()
+import matplotlib.pyplot as plt
+
+def plot_velocities(velocities, labels, title="Average Velocity Comparison", xlabel="Files", ylabel="Average Velocity", colors=None):
+    """
+    Plot a bar graph of velocities.
+
+    Parameters:
+    ----------
+    velocities : list of float
+        List of mean velocities to plot.
+    labels : list of str
+        Corresponding labels for the velocities.
+    title : str, optional
+        Title of the plot (default is "Average Velocity Comparison").
+    xlabel : str, optional
+        Label for the x-axis (default is "Files").
+    ylabel : str, optional
+        Label for the y-axis (default is "Average Velocity").
+    colors : list of str, optional
+        List of colors for the bars (default is None, which uses default colors).
+    """
+    plt.figure(figsize=(8, 6))
+    plt.bar(labels, velocities, color=colors if colors else ['blue', 'orange'])
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.show()

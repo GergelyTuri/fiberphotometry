@@ -58,3 +58,44 @@ def calculate_average_serotonin(merged_control_dfs, merged_pcb_dfs):
     }
 
     return averages, overall_averages
+import pandas as pd
+import numpy as np
+
+def load_and_process_file(file_path, frame_rate=30, likelihood_threshold=0.8):
+    """
+    Load and process HDF file to calculate mean velocity.
+
+    Parameters:
+    ----------
+    file_path : str
+        Path to the HDF file.
+    frame_rate : int, optional
+        Frame rate of the video (default is 30 fps).
+    likelihood_threshold : float, optional
+        Threshold for likelihood to filter out low-confidence points (default is 0.8).
+
+    Returns:
+    -------
+    float
+        Mean velocity calculated from the file.
+    """
+    beh_df = pd.read_hdf(file_path)
+
+    # Extract coordinates
+    x_coords = beh_df[(beh_df.columns.values[0][0], 'back1', 'x')]
+    y_coords = beh_df[(beh_df.columns.values[0][0], 'back1', 'y')]
+
+    # Remove noisy points where both x and y are zero
+    valid_points = (x_coords > 0) & (y_coords > 0)
+    likelihood_filter = beh_df[('DLC_resnet50_pcb_testJul2shuffle1_1030000', 'back1', 'likelihood')] > likelihood_threshold
+    x_coords = x_coords[valid_points & likelihood_filter]
+    y_coords = y_coords[valid_points & likelihood_filter]
+
+    # Compute velocity
+    dist_moved = np.sqrt(np.diff(x_coords)**2 + np.diff(y_coords)**2)
+    velocity = dist_moved / (1 / frame_rate)
+
+    # Calculate mean velocity
+    mean_velocity = velocity.mean()
+
+    return mean_velocity
