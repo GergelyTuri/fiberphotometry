@@ -58,8 +58,7 @@ def calculate_average_serotonin(merged_control_dfs, merged_pcb_dfs):
     }
 
     return averages, overall_averages
-import pandas as pd
-import numpy as np
+
 
 def load_and_process_file(file_path, frame_rate=30, likelihood_threshold=0.8):
     """

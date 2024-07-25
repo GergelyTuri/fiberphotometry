@@ -37,7 +37,7 @@ def plot_serotonin_levels(averages, overall_averages):
 
     plt.tight_layout()
     plt.show()
-import matplotlib.pyplot as plt
+
 
 def plot_velocities(velocities, labels, title="Average Velocity Comparison", xlabel="Files", ylabel="Average Velocity", colors=None):
     """
