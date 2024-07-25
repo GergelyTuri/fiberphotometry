@@ -29,13 +29,18 @@ def read_block(block_path):
     # The implementation of this function will depend on the format and structure of your data.
     # Here is a dummy implementation for demonstration purposes.
     # Replace this with the actual implementation.
+    class Stream:
+        def __init__(self, data):
+            self.data = data
+
     block = {
         'streams': {
-            '_465A': {'data': np.random.rand(1000)},
-            '_405A': {'data': np.random.rand(1000)}
+            '_465A': Stream(np.random.rand(1000)),
+            '_405A': Stream(np.random.rand(1000))
         }
     }
     return block
+
 def extract_and_compare_serotonin(merged_control_df, merged_pcb_df):
     control_mobile_serotonin = merged_control_df[merged_control_df['mob'] == 0]['Z-score']
     control_immobile_serotonin = merged_control_df[merged_control_df['mob'] == 1]['Z-score']
