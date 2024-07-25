@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
+import numpy as np
 
 def plot_zscore_signal(time_x, zscore_signal, baseline_end_idx, title="Z-score of 5HT2A Signal"):
     baseline_zscore = np.mean(zscore_signal[:baseline_end_idx])
