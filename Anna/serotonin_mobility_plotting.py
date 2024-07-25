@@ -87,4 +87,6 @@ def plot_distances(distances, labels, title="Total Distance Traveled Comparison"
     plt.bar(labels, distances, color=colors if colors else ['blue', 'orange'])
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    plt.title(titl
+    plt.title(title)
+
+    
