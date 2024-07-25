@@ -24,22 +24,7 @@ def load_and_merge_data(control_mobility_paths, control_serotonin_paths, pcb_mob
     merged_pcb_df = pd.concat(merged_pcb_dfs)
 
     return merged_control_df, merged_pcb_df, merged_control_dfs, merged_pcb_dfs
-def read_block(block_path):
-    # Assuming that this function reads the data block from the specified path.
-    # The implementation of this function will depend on the format and structure of your data.
-    # Here is a dummy implementation for demonstration purposes.
-    # Replace this with the actual implementation.
-    class Stream:
-        def __init__(self, data):
-            self.data = data
 
-    block = {
-        'streams': {
-            '_465A': Stream(np.random.rand(1000)),
-            '_405A': Stream(np.random.rand(1000))
-        }
-    }
-    return block
 
 def extract_and_compare_serotonin(merged_control_df, merged_pcb_df):
     control_mobile_serotonin = merged_control_df[merged_control_df['mob'] == 0]['Z-score']
@@ -150,6 +135,22 @@ def calculate_total_distance(file_path, likelihood_threshold=0.8):
 
     return total_distance
 
+
+def read_block(block_path):
+    # Assuming that this function reads the data block from the specified path.
+    # Replace this with the actual implementation.
+    class Stream:
+        def __init__(self, data, fs):
+            self.data = data
+            self.fs = fs
+
+    block = {
+        'streams': {
+            '_465A': Stream(np.random.rand(1000), fs=30),  # Example data with sampling frequency
+            '_405A': Stream(np.random.rand(1000), fs=30)   # Example data with sampling frequency
+        }
+    }
+    return block
 
 def read_and_process_signal(block_path, serotonin_channel='_465A', isos_channel='_405A'):
     block = read_block(block_path)
