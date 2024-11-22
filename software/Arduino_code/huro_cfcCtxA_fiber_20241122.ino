@@ -39,9 +39,9 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Program starting");
   Serial.println("CFC-A One-Shock");
-  Serial.println("Total Time = 242sec");
-  Serial.print("Pre-Shock Time = "); Serial.println(preShockDelay);
-  Serial.print("Shock Duration = "); Serial.println(shockDur);
+  Serial.print("Total Time = "); Serial.print((preShockDelay + postShockInt) / 1000); Serial.println(" sec");
+  Serial.print("Pre-Shock Time = "); Serial.print(preShockDelay / 1000); Serial.println(" sec");
+  Serial.print("Shock Duration = "); Serial.print(shockDur / 1000); Serial.println(" sec");
   Serial.println("Waiting for ethovision input...");
   Serial.print("Delaying for "); Serial.print(startDelay); Serial.println(" seconds to allow for video recording to start properly");
   // Delay for startDelay
