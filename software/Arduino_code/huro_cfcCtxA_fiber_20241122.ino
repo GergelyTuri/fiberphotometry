@@ -96,9 +96,8 @@ unsigned long shockDeliver(int shockNum) {
     
     while (millis() - shockTime < shockDur);
     
-    digitalWrite(shockPin, LOW);    // turn the shock off by making the voltage LOW
-    digitalWrite(fiberPin, HIGH);
-    digitalWrite(ledPin, LOW);// wait for the shock duration
+    digitalWrite(shockPin, LOW); // turn the shock off by making the voltage LOW
+    digitalWrite(ledPin, LOW); // wait for the shock duration
     
     sprintf(buffer, "Shock %d OFF, millis=", shockNum);
     Serial.print(buffer);
