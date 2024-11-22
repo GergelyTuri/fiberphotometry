@@ -110,10 +110,8 @@ unsigned long shockDeliver(int shockNum) {
 void countDown_inSeconds(unsigned long startTime, unsigned long duration, const char* message) {
   while (millis() - startTime < duration) {
     if ((millis() - startTime) % 1000 == 0) {
-      Serial.print("\r");
-      Serial.print(message);
-      char buffer[20];
-      sprintf(buffer, "%3d seconds", (duration - (millis() - startTime)) / 1000);
+      char buffer[30];
+      sprintf(buffer, "\r%s%3d seconds", message, (duration - (millis() - startTime)) / 1000);
       Serial.print(buffer);
     }
   }
