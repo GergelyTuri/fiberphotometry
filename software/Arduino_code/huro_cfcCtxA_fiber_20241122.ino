@@ -113,7 +113,6 @@ void countDown_inSeconds(unsigned long startTime, unsigned long duration, const 
     if ((millis() - startTime) % 1000 == 0) {
       Serial.print("\r");
       Serial.print(message);
-      // %3d reserves 3 spaces for the number, right-aligned
       char buffer[20];
       sprintf(buffer, "%3d seconds", (duration - (millis() - startTime)) / 1000);
       Serial.print(buffer);
