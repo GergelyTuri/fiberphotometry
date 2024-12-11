@@ -21,5 +21,6 @@ dependencies:
   - scikit-learn
   - scipy
   - pip
+  - openpyxl
   - pip:
       - tdt
