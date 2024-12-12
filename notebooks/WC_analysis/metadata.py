@@ -14,3 +14,10 @@ try:
 except FileNotFoundError:
     CLEANED_METADATA = None
     print("CLEANED_METADATA not found")
+
+# good quality metadata
+try:
+    GOOD_METADATA = join(ROOT_DATA_DIR, "data_cleanup_parsed_good.xlsx")
+except FileNotFoundError:
+    GOOD_METADATA = None
+    print("GOOD_METADATA not found")

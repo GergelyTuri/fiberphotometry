@@ -56,6 +56,16 @@ def main():
         metadata.CLEANUP_METADATA.replace(".xlsx", "_parsed.xlsx"), index=False
     )
 
+    # filtering out good quality data
+    good_df = merged_df[
+        ((merged_df["Fiber Signal"] == "good") | (merged_df["Fiber Signal"] == "great"))
+        & (merged_df["Motion Data"] != "discard")
+    ]
+
+    good_df.to_excel(
+        metadata.CLEANUP_METADATA.replace(".xlsx", "_parsed_good.xlsx"), index=False
+    )
+
 
 if __name__ == "__main__":
     main()
