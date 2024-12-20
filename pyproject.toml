@@ -30,6 +30,7 @@ dependencies = [
   "scikit-learn",
   "scipy",
   "tdt",
+  "tqdm",
 ]
 
 [project.urls]
