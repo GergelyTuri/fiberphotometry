@@ -14,26 +14,54 @@ Batch
 Calibrate
 """
 
-########################################################################################
+#########################################################################################
 
 import os
 import cv2
 import fnmatch
 import numpy as np
+from scipy import interpolate
 import pandas as pd
 import PIL.Image
+import matplotlib
+import matplotlib.pyplot as plt
 import time
 import warnings
 from tqdm import tqdm
 import holoviews as hv
 from holoviews import streams
+from holoviews import renderer
 from io import BytesIO
 from IPython.display import clear_output, Image, display
 
-hv.notebook_extension("bokeh")
+try:
+    hv.notebook_extension("bokeh")
+except Exception:
+    hv.extension("bokeh")
+
 warnings.filterwarnings("ignore")
 
 ########################################################################################
+
+
+def delete_first_ttl(onset_array):
+    """
+    -------------------------------------------------------------------------------------
+    Delete first TTL pulse if there are more than 3 pulses in the array
+    
+    Args:
+        onset_array: array of TTL pulse times
+    -------------------------------------------------------------------------------------    
+    Returns:
+        Modified array with first value deleted if length > 3, otherwise original array
+    -------------------------------------------------------------------------------------
+    """
+    if len(onset_array) > 3:
+        return np.delete(onset_array, 0)
+    return onset_array
+
+
+#########################################################################################
 
 
 def create_video_dict(
@@ -811,9 +839,7 @@ def PlayVideo_ext(video_dict, display_dict, Freezing, mt_cutoff, SIGMA=1):
 def SaveData(video_dict, Motion, Freezing, mt_cutoff, FreezeThresh, MinDuration):
     """
     -------------------------------------------------------------------------------------
-
     Saves frame by frame data for motion and freezing to .csv file
-
     -------------------------------------------------------------------------------------
     Args:
         video_dict:: [dict]
@@ -835,58 +861,144 @@ def SaveData(video_dict, Motion, Freezing, mt_cutoff, FreezeThresh, MinDuration)
                               List of filenames of videos in folder to be batch
                               processed.  [list]
                 'cal_frms' : number of frames to calibrate based upon
-
         Motion:: [numpy.array]
             Array containing number of pixels per frame whose intensity change from
             previous frame exceeds `mt_cutoff`. Length is number of frames passed to
             function to loop through. Value of first index, corresponding to first frame,
             is set to 0.
-
         Freezing:: [numpy.array]
             Array defining whether animal is freezing on frame by frame basis.
             0 = Not Freezing; 100 = Freezing
-
         mt_cutoff:: [float]
             Threshold value for determining magnitude of change sufficient to mark
             pixel as changing from prior frame.
-
         FreezeThresh:: [float]
             Threshold value for determining magnitude of activity in `Motion` to designate
             frame as freezing/not freezing.
-
         MinDuration:: [uint8]
             Duration for which `Motion` must be below `FreezeThresh` for freezing to be
             registered.
-
     -------------------------------------------------------------------------------------
     Returns:
         Nothing returned
-
     -------------------------------------------------------------------------------------
     Notes:
-
-
     """
+    # Get mouse id from folder name from the path
+    mouse_id = os.path.basename(os.path.dirname(os.getcwd())) if os.path.basename(os.getcwd()) == "analyzed_data" else os.path.basename(os.getcwd())
+
+    # Create shock array marking frame at time 0
+    shock_array = np.zeros(len(Motion))
+    shock_array[len(Motion)//2] = 100  # Since data is centered around shock
 
     # Create Dataframe
     DataFrame = pd.DataFrame(
         {
             "File": [video_dict["file"]] * len(Motion),
+            "Mouse ID": [mouse_id] * len(Motion),
             "MotionCutoff": np.ones(len(Motion)) * mt_cutoff,
             "FreezeThresh": np.ones(len(Motion)) * FreezeThresh,
             "MinFreezeDuration": np.ones(len(Motion)) * MinDuration,
             "Frame": np.arange(len(Motion)),
+            "Shock": shock_array,
             "Motion": Motion,
-            "Freezing": Freezing,
+            "Freezing": Freezing
         }
     )
+    DataFrame.to_csv("motion_freezing_output.csv", index=False)
 
-    DataFrame.to_csv(
-        os.path.splitext(video_dict["fpath"])[0] + "_FreezingOutput.csv", index=False
+########################################################################################
+
+
+def SaveFiberData(video_dict, dFF, fiber_time2use_binned, Freezing, Motion_frameArr_TS_Onset, time_window=(-30, 30)):
+    """
+    -------------------------------------------------------------------------------------
+    Saves fiber photometry data with corresponding time points to a .csv file,
+    limited to a specific time window around the shock. Includes shock timing and 
+    freezing state.
+    -------------------------------------------------------------------------------------
+    Args:
+        video_dict:: [dict]
+            Dictionary with the following keys:
+                'dpath' : directory containing files [str]
+                'file' : filename with extension [str]
+        dFF:: [numpy.array]
+            Array containing the calculated dF/F values
+        fiber_time2use_binned:: [numpy.array]
+            Array containing the time points relative to shock onset
+        Freezing:: [numpy.array]
+            Array defining whether animal is freezing (100) or not (0)
+        Motion_frameArr_TS_Onset:: [numpy.array]
+            Array containing the time points for behavioral data
+        time_window:: tuple
+            Time window (in seconds) to save data for, relative to shock (default: -30 to +30)
+    -------------------------------------------------------------------------------------
+    Returns:
+        Nothing returned
+    -------------------------------------------------------------------------------------
+    """
+    # Get mouse id from folder name from the path
+    mouse_id = os.path.basename(os.path.dirname(os.getcwd())) if os.path.basename(os.getcwd()) == "analyzed_data" else os.path.basename(os.getcwd())
+    
+    # Rest of the function remains the same...
+    time_mask = (fiber_time2use_binned >= time_window[0]) & (fiber_time2use_binned <= time_window[1])
+    time_points = fiber_time2use_binned[time_mask]
+    dff_values = dFF[time_mask]
+    frames = np.arange(len(time_points))
+    shock_array = np.zeros(len(frames))
+    shock_idx = np.argmin(np.abs(time_points - 0))
+    shock_array[shock_idx] = 100
+    
+    from scipy.interpolate import interp1d
+    freezing_interp = interp1d(Motion_frameArr_TS_Onset, Freezing, 
+                              kind='nearest', 
+                              bounds_error=False, 
+                              fill_value=0)
+    freezing_aligned = freezing_interp(time_points)
+    
+    DataFrame = pd.DataFrame(
+        {
+            "File": [video_dict["file"]] * len(frames),
+            "Mouse ID": [mouse_id] * len(frames),
+            "Frame": frames,
+            "Time_from_shock": time_points,
+            "Shock": shock_array,
+            "dFF": dff_values,
+            "Freezing": freezing_aligned
+        }
     )
+    
+    DataFrame.to_csv("fiber_freezing_output.csv", index=False)
 
 
 ########################################################################################
+
+
+def SaveShockDelay(mouse_id, shock_delay):
+    """
+    -------------------------------------------------------------------------------------
+    Saves the shock delay value to a text file with the mouse id and session
+    -------------------------------------------------------------------------------------
+    Args:
+        mouse_id:: [str]
+            Name of the mouse and current session
+        shock_delay:: [int]
+            Value of the shock delay in frames
+    -------------------------------------------------------------------------------------
+    Returns:
+        Nothing returned
+    -------------------------------------------------------------------------------------
+    """
+    # Create filename using folder name
+    filename = f"shock_delay.txt"
+    
+    # Write the information to the text file
+    with open(filename, 'w') as f:
+        f.write(f"Mouse ID & Session: {mouse_id}\n")
+        f.write(f"Shock Delay: {shock_delay}")
+
+
+##########################################################################################
 
 
 def Summarize(

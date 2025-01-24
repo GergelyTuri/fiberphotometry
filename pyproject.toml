@@ -16,6 +16,7 @@ dependencies = [
   "bokeh",
   "easygui",
   "holoviews",
+  "inquirer",
   "ipykernel",
   "ipython",
   "jinja2",
