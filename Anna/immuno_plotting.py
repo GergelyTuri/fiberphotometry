@@ -64,16 +64,18 @@ def plot_area(merged_df, area_name):
             )
 
     # Axes labels and title
-    ax.set_ylabel('Mean Volume', fontsize=16)
+    ax.set_ylabel('Mean Volume', fontsize=18)
     ax.set_xlabel('Group', fontsize=16)
-    ax.set_title(f'Mean BDNF in {area_name}', fontsize=16)
-    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.set_title(f'Mean BDNF in {area_name}', fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=15)
 
     # Sex legend
     for sex, color in sex_colors.items():
         ax.scatter([], [], color=color, edgecolor='black', label=sex)
-    ax.legend(title='Sex', fontsize=12, title_fontsize=12)
+    ax.legend(title='Sex', fontsize=15, title_fontsize=20)
 
     plt.tight_layout()
+    save_path = f'/gdrive/MyDrive/csvs/Mean_BDNF_{area_name}.png'
+    fig.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
