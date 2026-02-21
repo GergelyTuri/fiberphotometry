@@ -22,14 +22,23 @@ def get_star(p):
     else:            return 'ns'
 
 def plot_area(merged_df, area_name):
-    area_df = merged_df[merged_df['area'] == area_name].copy()
+    # case-insensitive area match
+    area_df = merged_df[merged_df['area'].str.upper() == area_name.upper()].copy()
     area_df['sex'] = area_df['sex'].str.upper()
 
-    label_map = {'ctrl': 'Control', 'pcb1': '1 Day', 'pcb7': '7 Day'}
+    # ocb1 is a typo for pcb1 in the raw data
+    label_map = {'ctrl': 'Control', 'pcb1': '1 Day', 'pcb7': '7 Day', 'ocb1': '1 Day'}
     area_df['label'] = area_df['group'].map(label_map)
     area_df = area_df.dropna(subset=['label', 'mean/volume', 'sex'])
 
-    group_order = ['Control', '1 Day', '7 Day']
+    # only include groups that actually have data
+    group_order = [g for g in ['Control', '1 Day', '7 Day']
+                   if g in area_df['label'].values]
+
+    if not group_order:
+        print(f"No data for area: {area_name}")
+        return
+
     grouped = (
         area_df.groupby('label')['mean/volume']
         .agg(['mean', 'sem'])
@@ -40,7 +49,7 @@ def plot_area(merged_df, area_name):
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    ax.bar(x_pos, grouped['mean'].fillna(0),
+    ax.bar(x_pos, grouped['mean'],
            color=[COLORS.get(g, '#888888') for g in group_order],
            edgecolor='black', linewidth=1.0, width=0.35, zorder=2)
 
@@ -66,6 +75,8 @@ def plot_area(merged_df, area_name):
     y_max = dot_max * 1.35
     ctrl_vals = area_df[area_df['label'] == 'Control']['mean/volume']
     for j, psi_label in enumerate(['1 Day', '7 Day']):
+        if psi_label not in group_order:
+            continue
         psi_vals = area_df[area_df['label'] == psi_label]['mean/volume']
         if len(ctrl_vals) >= 2 and len(psi_vals) >= 2:
             _, pval = ttest_ind(ctrl_vals, psi_vals, equal_var=False)
@@ -82,7 +93,8 @@ def plot_area(merged_df, area_name):
                     color='black' if label != 'ns' else '#666666',
                     fontweight='bold' if label != 'ns' else 'normal', zorder=7)
 
-    ax.set_title(f'Mean BDNF in {area_name}', fontsize=13, fontweight='bold', pad=10)
+    display_name = 'DG' if area_name.lower() == 'hilus' else area_name
+    ax.set_title(f'Mean BDNF in {display_name}', fontsize=13, fontweight='bold', pad=10)
     ax.set_xlim(x_pos[0] - 0.45, x_pos[-1] + 0.45)
     ax.set_xticks(x_pos)
     ax.set_xticklabels(group_order, fontsize=12, fontweight='bold')
@@ -107,7 +119,7 @@ def plot_area(merged_df, area_name):
               frameon=True, framealpha=0.92, edgecolor='#cccccc')
 
     plt.tight_layout()
-    save_path = f'/gdrive/MyDrive/csvs/Mean_BDNF_{area_name}.png'
+    save_path = f'/gdrive/MyDrive/csvs/Mean_BDNF_{display_name}.png'
     fig.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f'  Saved -> {save_path}')
     plt.show()
