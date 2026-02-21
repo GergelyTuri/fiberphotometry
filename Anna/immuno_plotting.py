@@ -1,6 +1,17 @@
 import matplotlib.pyplot as plt
 
 def plot_area(merged_df, area_name):
+        # Remove missing sex or area rows
+    df = df.dropna(subset=["sex", "area"])
+
+    # Keep only known areas
+    area_order = ["ca1", "ca3", "hilus"]
+    df = df[df["area"].isin(area_order)].copy()
+
+    # Convert to categorical
+    df["area"] = pd.Categorical(df["area"], categories=area_order, ordered=True)
+
+    ...
     """
     Plot data for a specific brain area with group bars and sex-colored scatter points.
 
