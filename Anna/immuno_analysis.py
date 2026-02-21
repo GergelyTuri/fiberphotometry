@@ -1,53 +1,78 @@
 import pandas as pd
 
-import pandas as pd
 
-def load_and_merge_data(df1_path, df2_path):
+def load_and_merge_data(bdnf_path, metadata_path):
+    """
+    Loads BDNF image-level data and animal metadata.
+    Cleans IDs.
+    Merges safely.
+    Aggregates to ONE value per animal per area.
+    """
 
-    df1 = pd.read_csv(df1_path)
-    df2 = pd.read_csv(df2_path)
+    # Load
+    bdnf = pd.read_csv(bdnf_path)
+    meta = pd.read_csv(metadata_path)
 
-    # 🔥 CLEAN animal_ID BEFORE merging
-    df1["animal_ID"] = (
-        df1["animal_ID"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
+    # Clean animal IDs
+    bdnf["animal_ID"] = (
+        bdnf["animal_ID"].astype(str).str.strip().str.upper()
     )
 
-    df2["animal_ID"] = (
-        df2["animal_ID"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
+    meta["animal_ID"] = (
+        meta["animal_ID"].astype(str).str.strip().str.upper()
     )
 
-    # Merge AFTER cleaning
-    merged_df = pd.merge(df1, df2, on="animal_ID", how="left")
+    # Keep only needed metadata columns
+    meta = meta[["animal_ID", "sex", "drug_condition"]]
 
-    # Standardize other columns
-    merged_df["group"] = (
-        merged_df["drug_condition"]
+    # Ensure one row per animal in metadata
+    meta = meta.drop_duplicates(subset="animal_ID")
+
+    # Merge
+    merged = pd.merge(
+        bdnf,
+        meta,
+        on="animal_ID",
+        how="left"
+    )
+
+    # Clean categorical fields
+    merged["area"] = (
+        merged["area"]
         .astype(str)
         .str.strip()
         .str.lower()
     )
 
-    merged_df["area"] = (
-        merged_df["area"]
+    merged["group"] = (
+        merged["drug_condition"]
         .astype(str)
         .str.strip()
         .str.lower()
     )
 
-    merged_df["sex"] = (
-        merged_df["sex"]
+    merged["sex"] = (
+        merged["sex"]
         .astype(str)
         .str.strip()
         .str.upper()
     )
 
-    merged_df.loc[~merged_df["sex"].isin(["M", "F"]), "sex"] = None
+    merged.loc[~merged["sex"].isin(["M", "F"]), "sex"] = None
 
-    return merged_df
-    return merged_df
+    # Ensure numeric
+    merged["mean/volume"] = pd.to_numeric(
+        merged["mean/volume"],
+        errors="coerce"
+    )
+
+    # 🔬 CRITICAL STEP:
+    # Aggregate to ONE value per animal per area
+    aggregated = (
+        merged
+        .groupby(["animal_ID", "area", "sex", "group"], as_index=False)
+        ["mean/volume"]
+        .mean()
+    )
+
+    return aggregated
