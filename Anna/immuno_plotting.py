@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-
+import pandas as pd
 def plot_area(merged_df, area_name):
         # Remove missing sex or area rows
     df = df.dropna(subset=["sex", "area"])
