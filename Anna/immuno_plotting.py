@@ -154,3 +154,271 @@ def plot_bdnf_figure(df):
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_bdnf_by_sex(df):
+    """
+    Produces two separate 2x2 publication-quality figures of BDNF,
+    one for Male and one for Female. Each shows Vehicle vs PSI
+    across areas (DG, CA3) and timepoints (Day 1, Day 7).
+    """
+
+    df = df.dropna(subset=["area", "sex", "group", "mean/volume"]).copy()
+    df["sex"] = df["sex"].str.upper()
+    df["group"] = df["group"].str.lower()
+
+    areas = ["hilus", "ca3"]
+    timepoints = ["pcb1", "pcb7"]
+    col_titles = ["Post-Drug Day 1", "Post-Drug Day 7"]
+    row_labels = ["DG", "CA3"]
+
+    bar_colors = {"Vehicle": "#D4B896", "PSI": "#CC5533"}
+
+    sex_configs = {
+        "M": {"label": "Male",   "dot_color": "black",   "filename": "bdnf_male.png"},
+        "F": {"label": "Female", "dot_color": "#E0409A", "filename": "bdnf_female.png"},
+    }
+
+    for sex_key, sex_cfg in sex_configs.items():
+
+        sex_df = df[df["sex"] == sex_key].copy()
+
+        fig, axes = plt.subplots(2, 2, figsize=(10, 7))
+        plt.subplots_adjust(hspace=0.4, wspace=0.25, right=0.82, top=0.88)
+
+        fig.suptitle(
+            f"Psilocybin Does Not Alter BDNF Protein Expression — {sex_cfg['label']}",
+            fontsize=13, fontweight="bold", y=0.97
+        )
+
+        for i, area in enumerate(areas):
+            for j, tp in enumerate(timepoints):
+                ax = axes[i, j]
+
+                plot_df = sex_df[
+                    (sex_df["area"] == area) & (sex_df["group"].isin([tp, "ctrl"]))
+                ].copy()
+                plot_df["plot_group"] = plot_df["group"].map(
+                    lambda x: "Vehicle" if x == "ctrl" else "PSI"
+                )
+
+                group_order = ["Vehicle", "PSI"]
+                x_positions = {g: k for k, g in enumerate(group_order)}
+
+                summary = (
+                    plot_df.groupby("plot_group")["mean/volume"]
+                    .agg(["mean", "sem"])
+                    .reindex(group_order)
+                    .reset_index()
+                )
+
+                # Bars
+                for _, row in summary.iterrows():
+                    ax.bar(
+                        x_positions[row["plot_group"]],
+                        row["mean"],
+                        yerr=row["sem"],
+                        color=bar_colors[row["plot_group"]],
+                        edgecolor="black",
+                        linewidth=0.8,
+                        capsize=5,
+                        width=0.55,
+                        error_kw={"elinewidth": 1.2, "capthick": 1.2}
+                    )
+
+                # Individual points — open circles, sex color edge
+                jitter_strength = 0.07
+                for _, row in plot_df.iterrows():
+                    xpos = x_positions[row["plot_group"]] + np.random.uniform(
+                        -jitter_strength, jitter_strength
+                    )
+                    ax.scatter(
+                        xpos,
+                        row["mean/volume"],
+                        facecolors="white",
+                        edgecolors=sex_cfg["dot_color"],
+                        linewidths=1.2,
+                        s=30,
+                        zorder=5
+                    )
+
+                # NS bracket
+                bar_top = (summary["mean"] + summary["sem"]).max()
+                tick_height = bar_top * 0.04
+                bracket_y = bar_top * 1.12
+
+                ax.plot([0, 1], [bracket_y, bracket_y], color="black", lw=1.2)
+                ax.plot([0, 0], [bracket_y - tick_height, bracket_y], color="black", lw=1.2)
+                ax.plot([1, 1], [bracket_y - tick_height, bracket_y], color="black", lw=1.2)
+                ax.text(0.5, bracket_y + bar_top * 0.02, "ns", ha="center", va="bottom", fontsize=9)
+
+                # Formatting
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.set_xticks([0, 1])
+                ax.set_xticklabels(["Veh", "1 mg/kg\nPSI"], fontsize=10, fontweight="bold")
+                ax.tick_params(axis="y", labelsize=10)
+                for label in ax.get_yticklabels():
+                    label.set_fontweight("bold")
+                ax.set_xlim(-0.5, 1.5)
+
+                if i == 0:
+                    ax.set_title(col_titles[j], fontsize=11, fontweight="bold", pad=10)
+
+                if j == 0:
+                    ax.set_ylabel("Mean BDNF Protein Intensity", fontsize=10, fontweight="bold")
+                else:
+                    ax.set_yticklabels([])
+
+        # Row labels
+        for i, label in enumerate(row_labels):
+            fig.text(
+                0.01,
+                axes[i, 0].get_position().y0 + axes[i, 0].get_position().height / 2,
+                label,
+                va="center", ha="left",
+                fontsize=11, fontweight="bold",
+                rotation=90
+            )
+
+        # Legend
+        legend_elements = [
+            mpatches.Patch(facecolor="#D4B896", edgecolor="black", label="Veh"),
+            mpatches.Patch(facecolor="#CC5533", edgecolor="black", label="1 mg/kg PSI"),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
+                       markeredgecolor=sex_cfg["dot_color"], markeredgewidth=1.5,
+                       markersize=7, label=sex_cfg["label"]),
+        ]
+        fig.legend(
+            handles=legend_elements, loc="upper right",
+            bbox_to_anchor=(0.99, 0.88), frameon=True, fontsize=9
+        )
+
+        plt.savefig(sex_cfg["filename"], dpi=150, bbox_inches="tight")
+        plt.show()
+        print(f"Saved: {sex_cfg['filename']}")
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+from scipy import stats
+
+def plot_bdnf_2x2_pub(df):
+    """
+    2x2 publication-quality figure of BDNF per area and timepoint.
+    Matches style: tan/coral bars, open-circle sex markers, NS brackets, external legend.
+    """
+
+    # Clean data
+    df = df.dropna(subset=["area", "sex", "group", "mean/volume"]).copy()
+    df["sex"] = df["sex"].str.upper()
+    df["group"] = df["group"].str.lower()
+
+    areas = ["hilus", "ca3"]
+    timepoints = ["pcb1", "pcb7"]
+    col_titles = ["Post-Drug Day 1", "Post-Drug Day 7"]
+    row_labels = ["DG", "CA3"]
+
+    bar_colors = {"Vehicle": "#D4B896", "PSI": "#CC5533"}
+    sex_facecolors = {"M": "white", "F": "white"}
+    sex_edgecolors = {"M": "black", "F": "#E0409A"}
+
+    fig, axes = plt.subplots(2, 2, figsize=(10, 7))
+    plt.subplots_adjust(hspace=0.4, wspace=0.25, right=0.78, top=0.88)
+
+    fig.suptitle("Psilocybin Does Not Alter BDNF Protein Expression", fontsize=13, fontweight="bold", y=0.97)
+
+    for i, area in enumerate(areas):
+        for j, tp in enumerate(timepoints):
+            ax = axes[i, j]
+
+            plot_df = df[(df["area"] == area) & (df["group"].isin([tp, "ctrl"]))].copy()
+            plot_df["plot_group"] = plot_df["group"].map(lambda x: "Vehicle" if x == "ctrl" else "PSI")
+
+            group_order = ["Vehicle", "PSI"]
+            x_positions = {g: k for k, g in enumerate(group_order)}
+
+            summary = plot_df.groupby("plot_group")["mean/volume"].agg(["mean", "sem"]).reindex(group_order).reset_index()
+
+            # Bars
+            for _, row in summary.iterrows():
+                ax.bar(
+                    x_positions[row["plot_group"]],
+                    row["mean"],
+                    yerr=row["sem"],
+                    color=bar_colors[row["plot_group"]],
+                    edgecolor="black",
+                    linewidth=0.8,
+                    capsize=5,
+                    width=0.55,
+                    error_kw={"elinewidth": 1.2, "capthick": 1.2}
+                )
+
+            # Individual data points
+            jitter_strength = 0.07
+            for _, row in plot_df.iterrows():
+                xpos = x_positions[row["plot_group"]] + np.random.uniform(-jitter_strength, jitter_strength)
+                ax.scatter(
+                    xpos,
+                    row["mean/volume"],
+                    facecolors=sex_facecolors[row["sex"]],
+                    edgecolors=sex_edgecolors[row["sex"]],
+                    linewidths=1.2,
+                    s=30,
+                    zorder=5
+                )
+
+            # NS bracket — single clean block, no duplicates
+            bar_top = (summary["mean"] + summary["sem"]).max()
+            tick_height = bar_top * 0.04
+            bracket_y = bar_top * 1.12
+
+            ax.plot([0, 1], [bracket_y, bracket_y], color="black", lw=1.2)          # horizontal line
+            ax.plot([0, 0], [bracket_y - tick_height, bracket_y], color="black", lw=1.2)  # left tick
+            ax.plot([1, 1], [bracket_y - tick_height, bracket_y], color="black", lw=1.2)  # right tick
+            ax.text(0.5, bracket_y + bar_top * 0.02, "ns", ha="center", va="bottom", fontsize=9)  # ns label
+
+            # Axes formatting
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.set_xticks([0, 1])
+            ax.set_xticklabels(["Veh", "1 mg/kg\nPSI"], fontsize=10, fontweight="bold")
+            ax.tick_params(axis="y", labelsize=10)
+            for label in ax.get_yticklabels():
+                label.set_fontweight("bold")
+            ax.set_xlim(-0.5, 1.5)
+
+            if i == 0:
+                ax.set_title(col_titles[j], fontsize=11, fontweight="bold", pad=10)
+
+            if j == 0:
+                ax.set_ylabel("Mean BDNF Protein Intensity", fontsize=10, fontweight="bold")
+            else:
+                ax.set_yticklabels([])
+
+    # Row labels
+    for i, label in enumerate(row_labels):
+        fig.text(
+            0.01,
+            axes[i, 0].get_position().y0 + axes[i, 0].get_position().height / 2,
+            label,
+            va="center", ha="left",
+            fontsize=11, fontweight="bold",
+            rotation=90
+        )
+
+    # Legend
+    legend_elements = [
+        mpatches.Patch(facecolor="#D4B896", edgecolor="black", label="Veh"),
+        mpatches.Patch(facecolor="#CC5533", edgecolor="black", label="1 mg/kg PSI"),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
+                   markeredgecolor='black', markeredgewidth=1.5, markersize=7, label='Male'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
+                   markeredgecolor='#E0409A', markeredgewidth=1.5, markersize=7, label='Female'),
+    ]
+    fig.legend(handles=legend_elements, loc="upper right", bbox_to_anchor=(0.99, 0.88),
+               frameon=True, fontsize=9, title_fontsize=9)
+
+    plt.savefig("bdnf_figure.png", dpi=150, bbox_inches="tight")
+    plt.show()
