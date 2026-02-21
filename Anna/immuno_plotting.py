@@ -80,114 +80,66 @@ def plot_area(merged_df, area_name):
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_bdnf_figure(merged_df):
+def plot_bdnf_figure(df):
+    """
+    Expects aggregated dataframe from load_and_merge_data()
+    """
 
-    # Ensure standardized columns
-    df = merged_df.copy()
+    # Remove missing sex rows
+    df = df.dropna(subset=["sex"])
 
-    regions = ["dg", "ca3"]
-    timepoints = ["pcb1", "pcb7"]  # 1 day, 7 day
+    # Order areas
+    area_order = ["ca1", "ca3", "hilus"]
+    df["area"] = pd.Categorical(df["area"], categories=area_order, ordered=True)
 
-    region_labels = {"dg": "DG", "ca3": "CA3"}
-    time_labels = {"pcb1": "Post-Drug Day 1",
-                   "pcb7": "Post-Drug Day 7"}
+    # Compute mean + SEM per area per sex
+    summary = (
+        df
+        .groupby(["area", "sex"])
+        ["mean/volume"]
+        .agg(["mean", "sem"])
+        .reset_index()
+    )
 
-    group_labels = {"ctrl": "Veh",
-                    "pcb1": "1 mg/kg PSI",
-                    "pcb7": "1 mg/kg PSI"}
+    areas = area_order
+    sexes = ["M", "F"]
 
-    bar_colors = {
-        "ctrl": "#d8c4ad",
-        "pcb1": "#d97759",
-        "pcb7": "#d97759"
-    }
+    x = np.arange(len(areas))
+    width = 0.35
 
-    sex_colors = {"M": "black", "F": "#d81b60"}
+    fig, ax = plt.subplots(figsize=(6, 5))
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharey=True)
+    for i, sex in enumerate(sexes):
+        data = summary[summary["sex"] == sex]
+        means = []
+        sems = []
 
-    for i, region in enumerate(regions):
-        for j, time in enumerate(timepoints):
+        for area in areas:
+            row = data[data["area"] == area]
+            if len(row) > 0:
+                means.append(row["mean"].values[0])
+                sems.append(row["sem"].values[0])
+            else:
+                means.append(0)
+                sems.append(0)
 
-            ax = axes[i, j]
-
-            # Filter data
-            sub = df[
-                (df["area"] == region) &
-                ((df["group"] == "ctrl") | (df["group"] == time))
-            ]
-
-            # Group stats
-            grouped = sub.groupby("group")["mean/volume"].agg(["mean", "sem"]).reset_index()
-
-            x_positions = np.arange(len(grouped))
-
-            for k, row in grouped.iterrows():
-                ax.bar(
-                    x_positions[k],
-                    row["mean"],
-                    yerr=row["sem"],
-                    color=bar_colors[row["group"]],
-                    edgecolor="black",
-                    capsize=5,
-                    width=0.6
-                )
-
-            # Scatter points
-            for k, group in enumerate(grouped["group"]):
-                scatter_data = sub[sub["group"] == group]
-                for _, r in scatter_data.iterrows():
-                    ax.scatter(
-                        x_positions[k],
-                        r["mean/volume"],
-                        color=sex_colors[r["sex"]],
-                        edgecolor="black",
-                        s=70,
-                        zorder=3
-                    )
-
-            ax.set_xticks(x_positions)
-            ax.set_xticklabels([group_labels[g] for g in grouped["group"]], fontsize=11)
-
-            if i == 0:
-                ax.set_title(time_labels[time], fontsize=14)
-
-            if j == 0:
-                ax.set_ylabel("Mean BDNF Protein Intensity", fontsize=12)
-
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-
-            # Add simple "ns" bracket
-            if len(grouped) == 2:
-                y_max = grouped["mean"].max() + grouped["sem"].max() + 20
-                ax.plot([0, 0, 1, 1], [y_max, y_max+5, y_max+5, y_max], color="black")
-                ax.text(0.5, y_max+7, "ns", ha="center")
-
-            ax.set_ylim(0, df["mean/volume"].max() * 1.3)
-
-            if j == 0:
-                ax.annotate(region_labels[region],
-                            xy=(-0.6, 0.5),
-                            xycoords="axes fraction",
-                            rotation=90,
-                            va="center",
-                            fontsize=13)
-
-    # Legend
-    handles = []
-    for sex, color in sex_colors.items():
-        handles.append(
-            plt.Line2D([0], [0], marker='o', color='w',
-                       markerfacecolor=color, markeredgecolor="black",
-                       markersize=8, label=sex)
+        ax.bar(
+            x + (i - 0.5) * width,
+            means,
+            width,
+            yerr=sems,
+            capsize=5,
+            label=sex
         )
 
-    fig.legend(handles=handles, title="Sex",
-               loc="upper right", bbox_to_anchor=(1.05, 0.95))
+    ax.set_xticks(x)
+    ax.set_xticklabels(["CA1", "CA3", "Hilus"])
+    ax.set_ylabel("Mean / Volume")
+    ax.set_xlabel("Region")
+    ax.legend(title="Sex")
 
-    fig.suptitle("Psilocybin Does Not Alter BDNF Protein Expression",
-                 fontsize=16)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
 
     plt.tight_layout()
     plt.show()
