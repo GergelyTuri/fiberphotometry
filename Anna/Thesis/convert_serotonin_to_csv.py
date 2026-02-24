@@ -157,6 +157,7 @@ def zscore_single_file(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def zscore_two_files(
+        
     baseline_path:   str,
     experiment_path: str,
     output_path:     str,
@@ -217,3 +218,62 @@ def zscore_two_files(
     label = experiment_path.rstrip('/').split('/')[-1]
     return _save_and_plot(time_x, z, output_path,
                           title=f'Z-score — {label}', plot=plot)
+
+
+def zscore_from_dff_csvs(
+    baseline_path:  str,
+    recording_path: str,
+    output_path:    str,
+    time_col:       str  = 'time',
+    dff_col:        str  = 'dff',
+    plot:           bool = True,
+) -> pd.DataFrame:
+    """
+    Z-score a recording dff CSV using the mean and std of a baseline dff CSV.
+
+    Parameters
+    ----------
+    baseline_path  : path to baseline dff CSV
+    recording_path : path to recording dff CSV
+    output_path    : where to save the z-scored CSV
+    time_col       : name of time column (default 'time')
+    dff_col        : name of dff column (default 'dff')
+    plot           : show a quick QC plot
+
+    Returns
+    -------
+    DataFrame with columns 'Time (s)' and 'Z-score'
+    """
+    baseline  = pd.read_csv(baseline_path)
+    recording = pd.read_csv(recording_path)
+
+    # Compute baseline stats
+    bline_mean = baseline[dff_col].mean()
+    bline_std  = baseline[dff_col].std()
+    print(f'Baseline → mean: {bline_mean:.4f}, std: {bline_std:.4f}')
+
+    # Z-score the recording using baseline stats
+    z = (recording[dff_col] - bline_mean) / bline_std
+
+    df_out = pd.DataFrame({
+        'Time (s)': recording[time_col].values,
+        'Z-score':  z.values,
+    })
+
+    df_out.to_csv(output_path, index=False)
+    print(f'Saved → {output_path}')
+
+    if plot:
+        plt.figure(figsize=(10, 4))
+        plt.plot(df_out['Time (s)'], df_out['Z-score'],
+                 color='blue', linewidth=1.2)
+        plt.axhline(0, color='red', linestyle='--', linewidth=1,
+                    label='Baseline (z=0)')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Z-score')
+        plt.title(f'Z-score — {recording_path.split("/")[-1]}')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+    return df_out
