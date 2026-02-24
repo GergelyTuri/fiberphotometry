@@ -137,34 +137,37 @@ def collect_condition_data(
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 3 — plot
 # ─────────────────────────────────────────────────────────────────────────────
-
 def plot_mobile_immobile(
-    psi_data:  dict[str, list[float]],
-    ctrl_data: dict[str, list[float]],
-    mobility_threshold: float = 5.0,
-    title:     str  = 'Serotonin: Mobile vs Immobile',
-    ylabel:    str  = 'Mean Z-score',
-) -> plt.Figure:
+    psi_data,
+    ctrl_data,
+    mobility_threshold=5.0,
+    title='Avg Serotonin: Mobile vs Immobile',
+    ylabel='Mean Z-score',
+    output_path=None,
+):
     """
-    Bar graph with individual animal dots and paired lines,
-    comparing psi vs ctrl for mobile and immobile states.
+    Publication-grade bar graph.
+    Saline     = light grey with diagonal hatching (//)
+    Psilocybin = dark grey solid
+    Dots       = white with black outline, paired lines in grey.
+    Significance bar per category (paired t-test).
 
     Parameters
     ----------
-    psi_data  : output of collect_condition_data() for psilocybin animals
-    ctrl_data : output of collect_condition_data() for control animals
-    mobility_threshold : shown in the title for reference
-    title     : plot title
-    ylabel    : y-axis label
+    psi_data    : output of collect_condition_data() for psilocybin animals
+    ctrl_data   : output of collect_condition_data() for control animals
+    output_path : if provided, saves figure here at 300 dpi
     """
+    from matplotlib.patches import Patch
+    from scipy.stats import ttest_rel
+
     categories = ['mobile', 'immobile']
+    xlabels    = ['Mobile', 'Immobile']
     x          = np.arange(len(categories))
     width      = 0.35
 
-    psi_color  = '#E87722'
-    ctrl_color = '#4878CF'
-    psi_dot    = '#8b3d00'
-    ctrl_dot   = '#1a3d6e'
+    ctrl_color = '#BEBEBE'  # light grey — saline
+    psi_color  = '#606060'  # dark grey — psilocybin
 
     psi_means  = [np.nanmean(psi_data[c])  for c in categories]
     ctrl_means = [np.nanmean(ctrl_data[c]) for c in categories]
@@ -173,62 +176,72 @@ def plot_mobile_immobile(
 
     fig, ax = plt.subplots(figsize=(7, 6))
 
-    # Bars
-    ax.bar(x - width / 2, psi_means,  width, yerr=psi_sems,
-           color=psi_color,  label='Psilocybin', capsize=5,
+    # Bars — saline (ctrl) left hatched, psi right solid
+    ax.bar(x - width / 2, ctrl_means, width, yerr=ctrl_sems,
+           color=ctrl_color, hatch='//', edgecolor='black', linewidth=0.8,
+           label='Saline', capsize=5,
            error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
-    ax.bar(x + width / 2, ctrl_means, width, yerr=ctrl_sems,
-           color=ctrl_color, label='Control',    capsize=5,
+    ax.bar(x + width / 2, psi_means, width, yerr=psi_sems,
+           color=psi_color, edgecolor='black', linewidth=0.8,
+           label='Psilocybin', capsize=5,
            error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
 
-    # Individual animal dots + paired lines
+    # Individual dots + paired connecting lines
     rng = np.random.default_rng(42)
     for i, cat in enumerate(categories):
-        psi_vals  = psi_data[cat]
-        ctrl_vals = ctrl_data[cat]
+        cv = ctrl_data[cat]
+        pv = psi_data[cat]
 
-        jp = rng.uniform(-0.06, 0.06, size=len(psi_vals))
-        jc = rng.uniform(-0.06, 0.06, size=len(ctrl_vals))
+        jc = rng.uniform(-0.04, 0.04, size=len(cv))
+        jp = rng.uniform(-0.04, 0.04, size=len(pv))
 
-        ax.scatter(x[i] - width / 2 + jp, psi_vals,
-                   color=psi_dot,  s=60, zorder=5, alpha=0.9)
-        ax.scatter(x[i] + width / 2 + jc, ctrl_vals,
-                   color=ctrl_dot, s=60, zorder=5, alpha=0.9)
+        ax.scatter(x[i] - width / 2 + jc, cv,
+                   color='white', edgecolors='black', s=55,
+                   linewidths=1.2, zorder=5)
+        ax.scatter(x[i] + width / 2 + jp, pv,
+                   color='white', edgecolors='black', s=55,
+                   linewidths=1.2, zorder=5)
 
-        # Connect paired animals (assumes same order in both lists)
-        n_pairs = min(len(psi_vals), len(ctrl_vals))
+        n_pairs = min(len(cv), len(pv))
         for j in range(n_pairs):
             ax.plot(
-                [x[i] - width / 2 + jp[j], x[i] + width / 2 + jc[j]],
-                [psi_vals[j], ctrl_vals[j]],
-                color='gray', linewidth=0.9, alpha=0.6, zorder=3
+                [x[i] - width / 2 + jc[j], x[i] + width / 2 + jp[j]],
+                [cv[j], pv[j]],
+                color='gray', linewidth=0.8, alpha=0.5, zorder=3
             )
 
+        # Significance bar
+        if n_pairs >= 3:
+            _, p = ttest_rel(cv[:n_pairs], pv[:n_pairs])
+        else:
+            p = 1.0
+
+        all_vals = [v for v in list(cv) + list(pv) if not np.isnan(v)]
+        y_top = max(all_vals)
+        _add_significance_bar(ax, x[i] - width / 2, x[i] + width / 2, y_top, p)
+
+    # Legend
+    legend_elements = [
+        Patch(facecolor=ctrl_color, hatch='//', edgecolor='black', label='Saline'),
+        Patch(facecolor=psi_color, edgecolor='black', label='Psilocybin'),
+    ]
+    ax.legend(handles=legend_elements, fontsize=11, frameon=False)
+
     ax.set_xticks(x)
-    ax.set_xticklabels(['Mobile', 'Immobile'], fontsize=13)
+    ax.set_xticklabels(xlabels, fontsize=13)
     ax.set_ylabel(ylabel, fontsize=13)
     ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13)
-    ax.axhline(0, color='grey', linestyle='--', linewidth=0.8)
-    ax.legend(fontsize=11)
+    ax.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.4)
     ax.spines[['top', 'right']].set_visible(False)
+    ax.tick_params(axis='both', labelsize=11)
+    ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] * 1.2)
     fig.tight_layout()
 
+    if output_path:
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f'Saved -> {output_path}')
+
     return fig
-
-"""
-plot_serotonin_mobility_overlay.py
-───────────────────────────────────
-QC helper: plot serotonin z-score and velocity on the same time axis
-for each animal so you can visually inspect the signal and identify outliers.
-
-Add to your mobility_serotonin.py or call separately.
-"""
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-
 
 def plot_serotonin_velocity_overlay(
     serotonin_path:     str,
@@ -331,8 +344,6 @@ def plot_serotonin_velocity_overlay(
         print(f'Saved → {output_path}')
 
     return fig
-
-
 def plot_all_animals(
     animal_list: list[dict],
     mobility_threshold: float = 7.0,
