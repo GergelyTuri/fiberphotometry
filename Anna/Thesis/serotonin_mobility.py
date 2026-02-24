@@ -214,3 +214,158 @@ def plot_mobile_immobile(
     fig.tight_layout()
 
     return fig
+
+"""
+plot_serotonin_mobility_overlay.py
+───────────────────────────────────
+QC helper: plot serotonin z-score and velocity on the same time axis
+for each animal so you can visually inspect the signal and identify outliers.
+
+Add to your mobility_serotonin.py or call separately.
+"""
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+
+
+def plot_serotonin_velocity_overlay(
+    serotonin_path:     str,
+    velocity_path:      str,
+    animal_name:        str   = '',
+    mobility_threshold: float = 7.0,
+    serotonin_time_col: str   = 'Time (s)',
+    serotonin_val_col:  str   = 'Z-score',
+    velocity_time_col:  str   = 'Time (s)',
+    velocity_val_col:   str   = 'Smoothed Velocity (cm/s)',
+    output_path:        str   | None = None,
+) -> plt.Figure:
+    """
+    Plot serotonin z-score (top) and velocity (bottom) on a shared time axis
+    for one animal. Shades mobile periods in both panels so you can see
+    exactly when the animal was moving and what the serotonin was doing.
+
+    Parameters
+    ----------
+    serotonin_path      : path to serotonin z-score CSV
+    velocity_path       : path to smoothed velocity CSV
+    animal_name         : label for the plot title
+    mobility_threshold  : velocity threshold used to define mobile (cm/s)
+    output_path         : if provided, saves the figure here
+    """
+    sero_df = pd.read_csv(serotonin_path)
+    velo_df = pd.read_csv(velocity_path).dropna(subset=[velocity_val_col])
+
+    sero_df[serotonin_time_col] = pd.to_numeric(sero_df[serotonin_time_col], errors='coerce')
+    velo_df[velocity_time_col]  = pd.to_numeric(velo_df[velocity_time_col],  errors='coerce')
+    sero_df = sero_df.dropna(subset=[serotonin_time_col, serotonin_val_col])
+
+    sero_time = sero_df[serotonin_time_col].to_numpy()
+    sero_vals = sero_df[serotonin_val_col].to_numpy()
+    velo_time = velo_df[velocity_time_col].to_numpy()
+    velo_vals = velo_df[velocity_val_col].to_numpy()
+
+    # Find mobile periods in velocity
+    is_mobile = velo_vals >= mobility_threshold
+
+    # ── Plot ─────────────────────────────────────────────────────────────────
+    fig = plt.figure(figsize=(14, 7))
+    gs  = gridspec.GridSpec(2, 1, hspace=0.08)
+
+    ax1 = fig.add_subplot(gs[0])  # serotonin
+    ax2 = fig.add_subplot(gs[1], sharex=ax1)  # velocity
+
+    # Shade mobile periods on both panels
+    in_mobile = False
+    mobile_start = None
+    for i, mobile in enumerate(is_mobile):
+        t = velo_time[i]
+        if mobile and not in_mobile:
+            mobile_start = t
+            in_mobile = True
+        elif not mobile and in_mobile:
+            ax1.axvspan(mobile_start, t, alpha=0.12, color='green', zorder=0)
+            ax2.axvspan(mobile_start, t, alpha=0.12, color='green', zorder=0)
+            in_mobile = False
+    # close last span if still open
+    if in_mobile:
+        ax1.axvspan(mobile_start, velo_time[-1], alpha=0.12, color='green', zorder=0)
+        ax2.axvspan(mobile_start, velo_time[-1], alpha=0.12, color='green', zorder=0)
+
+    # Serotonin panel
+    ax1.plot(sero_time, sero_vals, color='#C1440E', linewidth=1.0, label='Serotonin Z-score')
+    ax1.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.5)
+    ax1.set_ylabel('Serotonin Z-score', fontsize=12)
+    ax1.spines[['top', 'right']].set_visible(False)
+    ax1.tick_params(labelbottom=False)
+
+    # Mark mean serotonin during mobile vs immobile
+    # Match each serotonin time to nearest velocity
+    indices          = np.searchsorted(velo_time, sero_time, side='left')
+    indices          = np.clip(indices, 0, len(velo_time) - 1)
+    matched_mobile   = velo_vals[indices] >= mobility_threshold
+    mobile_mean      = np.nanmean(sero_vals[matched_mobile])
+    immobile_mean    = np.nanmean(sero_vals[~matched_mobile])
+    ax1.axhline(mobile_mean,   color='green',  linestyle=':', linewidth=1.2,
+                label=f'Mobile mean: {mobile_mean:.2f}')
+    ax1.axhline(immobile_mean, color='purple', linestyle=':', linewidth=1.2,
+                label=f'Immobile mean: {immobile_mean:.2f}')
+    ax1.legend(fontsize=9, frameon=False, loc='upper right')
+
+    # Velocity panel
+    ax2.plot(velo_time, velo_vals, color='#4878CF', linewidth=1.0, label='Velocity')
+    ax2.axhline(mobility_threshold, color='green', linestyle='--',
+                linewidth=1.0, label=f'Threshold ({mobility_threshold} cm/s)')
+    ax2.set_ylabel('Velocity (cm/s)', fontsize=12)
+    ax2.set_xlabel('Time (s)', fontsize=12)
+    ax2.spines[['top', 'right']].set_visible(False)
+    ax2.legend(fontsize=9, frameon=False, loc='upper right')
+
+    fig.suptitle(f'{animal_name}  |  green shading = mobile periods',
+                 fontsize=13, y=1.01)
+    fig.tight_layout()
+
+    if output_path:
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f'Saved → {output_path}')
+
+    return fig
+
+
+def plot_all_animals(
+    animal_list: list[dict],
+    mobility_threshold: float = 7.0,
+    output_folder: str | None = None,
+) -> None:
+    """
+    Run plot_serotonin_velocity_overlay() for every animal in a list.
+
+    Parameters
+    ----------
+    animal_list : list of dicts with keys:
+                    'serotonin_path'
+                    'velocity_path'
+                    'name'           — label for the plot title
+    mobility_threshold : velocity threshold in cm/s
+    output_folder : if provided, saves each figure as {name}_overlay.png
+    """
+    for animal in animal_list:
+        out = None
+        if output_folder:
+            out = f"{output_folder}/{animal['name']}_overlay.png"
+
+        plot_serotonin_velocity_overlay(
+            serotonin_path     = animal['serotonin_path'],
+            velocity_path      = animal['velocity_path'],
+            animal_name        = animal['name'],
+            mobility_threshold = mobility_threshold,
+            output_path        = out,
+        )
+        plt.show()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXAMPLE USAGE
+# ─────────────────────────────────────────────────────────────────────────────
+
