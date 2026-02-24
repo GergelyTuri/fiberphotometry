@@ -123,10 +123,10 @@ def plot_mobility(
     x           = np.arange(len(categories))
     width       = 0.35
 
-    psi_color   = '#C1440E'   # warm red (psilocybin)
-    ctrl_color  = '#C8A882'   # tan/beige (vehicle/saline) — matches your reference
-    psi_dot     = '#7a2a08'
-    ctrl_dot    = '#7a6040'
+    ctrl_color  = '#BEBEBE'   # light grey (saline)
+    psi_color   = '#606060'   # dark grey (psilocybin)
+    ctrl_dot    = 'black'
+    psi_dot     = 'black'
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
@@ -152,10 +152,10 @@ def plot_mobility(
         jp = rng.uniform(-0.04, 0.04, size=len(pv))
 
         ax.scatter(x[i] - width / 2 + jc, cv,
-                   color='white', edgecolors=ctrl_dot, s=55, zorder=5,
+                   color='white', edgecolors='black', s=55, zorder=5,
                    linewidths=1.2)
         ax.scatter(x[i] + width / 2 + jp, pv,
-                   color='white', edgecolors=psi_dot,  s=55, zorder=5,
+                   color='white', edgecolors='black', s=55, zorder=5,
                    linewidths=1.2)
 
         # Connect paired animals
@@ -182,8 +182,8 @@ def plot_mobility(
     # Legend patches
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor=ctrl_color, label='Saline'),
-        Patch(facecolor=psi_color,  label='Psilocybin'),
+        Patch(facecolor='#BEBEBE', edgecolor='black', label='Saline'),
+        Patch(facecolor='#606060', edgecolor='black', label='Psilocybin'),
     ]
     ax.legend(handles=legend_elements, fontsize=11, frameon=False)
 
