@@ -1,20 +1,20 @@
 """
 mobility_plot.py
 ────────────────
-Plot mobility vs immobility for psi vs ctrl conditions, averaged across animals.
+Publication-grade bar plot of mobile vs immobile fraction
+for psi vs ctrl conditions, averaged across animals.
 
 TWO PLOTS:
   1. Absolute fraction of time mobile/immobile during recording
   2. Change in mobility fraction from baseline to recording
-     (recording fraction - baseline fraction)
 
-Only needs velocity CSVs — no serotonin required.
+Styling: clean, minimal, publication-ready with significance bar.
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import sem
+from scipy.stats import sem, wilcoxon, ttest_rel
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -26,21 +26,13 @@ def compute_mobility_fractions(
     mobility_threshold: float = 5.0,
     velocity_val_col:   str   = 'Smoothed Velocity (cm/s)',
 ) -> dict[str, float]:
-    """
-    Compute fraction of time spent mobile and immobile for one CSV.
-
-    Returns
-    -------
-    {'mobile': float, 'immobile': float}  — fractions that sum to 1.0
-    """
+    """Compute fraction of time mobile and immobile for one CSV."""
     df        = pd.read_csv(velocity_path).dropna(subset=[velocity_val_col])
     is_mobile = df[velocity_val_col] >= mobility_threshold
-
-    mobile_frac   = is_mobile.sum()    / len(is_mobile)
-    immobile_frac = (~is_mobile).sum() / len(is_mobile)
-
-    print(f"  mobile: {mobile_frac:.2%}, immobile: {immobile_frac:.2%}")
-    return {'mobile': mobile_frac, 'immobile': immobile_frac}
+    return {
+        'mobile':   is_mobile.sum()    / len(is_mobile),
+        'immobile': (~is_mobile).sum() / len(is_mobile),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -52,12 +44,11 @@ def collect_mobility_data(
     mobility_threshold: float = 5.0,
 ) -> dict[str, list[float]]:
     """
-    Collect mobility fractions and baseline-normalized changes for all animals
-    in one condition.
+    Collect mobility fractions for all animals in one condition.
 
     Parameters
     ----------
-    animal_list : list of dicts, each with keys:
+    animal_list : list of dicts with keys:
                     'recording_path' — velocity CSV for the recording
                     'baseline_path'  — velocity CSV for the baseline
     mobility_threshold : velocity threshold in cm/s
@@ -65,129 +56,151 @@ def collect_mobility_data(
     Returns
     -------
     {
-      'mobile':          [frac_a1, ...],   # absolute mobile fraction
-      'immobile':        [frac_a1, ...],   # absolute immobile fraction
-      'mobile_change':   [delta_a1, ...],  # recording - baseline mobile
-      'immobile_change': [delta_a1, ...],  # recording - baseline immobile
+      'mobile':          [frac_a1, ...],
+      'immobile':        [frac_a1, ...],
+      'mobile_change':   [delta_a1, ...],  # recording - baseline
+      'immobile_change': [delta_a1, ...],
     }
     """
-    collected = {
-        'mobile':          [],
-        'immobile':        [],
-        'mobile_change':   [],
-        'immobile_change': [],
-    }
+    collected = {'mobile': [], 'immobile': [],
+                 'mobile_change': [], 'immobile_change': []}
 
     for animal in animal_list:
-        name = animal['recording_path'].split('/')[-1]
-        print(f"\n{name}")
-
+        print(animal['recording_path'].split('/')[-1])
         rec  = compute_mobility_fractions(animal['recording_path'], mobility_threshold)
         base = compute_mobility_fractions(animal['baseline_path'],  mobility_threshold)
-
         collected['mobile'].append(rec['mobile'])
         collected['immobile'].append(rec['immobile'])
-        collected['mobile_change'].append(rec['mobile']   - base['mobile'])
+        collected['mobile_change'].append(rec['mobile']    - base['mobile'])
         collected['immobile_change'].append(rec['immobile'] - base['immobile'])
 
     return collected
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PLOT HELPER — shared bar + dots + lines logic
+# STATS HELPER
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _bar_plot(ax, psi_vals, ctrl_vals, labels, ylabel, title,
-              psi_color, ctrl_color, psi_dot, ctrl_dot):
-    x     = np.arange(len(labels))
-    width = 0.35
-    rng   = np.random.default_rng(42)
+def _pval_to_stars(p: float) -> str:
+    if p < 0.001: return '***'
+    if p < 0.01:  return '**'
+    if p < 0.05:  return '*'
+    return 'ns'
 
-    psi_means  = [np.nanmean(psi_vals[c])  for c in labels]
-    ctrl_means = [np.nanmean(ctrl_vals[c]) for c in labels]
-    psi_sems   = [sem(psi_vals[c],  nan_policy='omit') for c in labels]
-    ctrl_sems  = [sem(ctrl_vals[c], nan_policy='omit') for c in labels]
 
-    ax.bar(x - width / 2, psi_means,  width, yerr=psi_sems,
-           color=psi_color,  label='Psilocybin', capsize=5,
-           error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
-    ax.bar(x + width / 2, ctrl_means, width, yerr=ctrl_sems,
-           color=ctrl_color, label='Saline', capsize=5,
-           error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
-
-    for i, cat in enumerate(labels):
-        pv = psi_vals[cat]
-        cv = ctrl_vals[cat]
-        jp = rng.uniform(-0.06, 0.06, size=len(pv))
-        jc = rng.uniform(-0.06, 0.06, size=len(cv))
-
-        ax.scatter(x[i] - width / 2 + jp, pv, color=psi_dot,  s=60, zorder=5, alpha=0.9)
-        ax.scatter(x[i] + width / 2 + jc, cv, color=ctrl_dot, s=60, zorder=5, alpha=0.9)
-
-        for j in range(min(len(pv), len(cv))):
-            ax.plot(
-                [x[i] - width / 2 + jp[j], x[i] + width / 2 + jc[j]],
-                [pv[j], cv[j]],
-                color='gray', linewidth=0.9, alpha=0.6, zorder=3
-            )
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(['Mobile', 'Immobile'], fontsize=13)
-    ax.set_ylabel(ylabel, fontsize=13)
-    ax.set_title(title, fontsize=13)
-    ax.axhline(0, color='grey', linestyle='--', linewidth=0.8)
-    ax.legend(fontsize=11)
-    ax.spines[['top', 'right']].set_visible(False)
+def _add_significance_bar(ax, x1, x2, y, p_val, fontsize=11):
+    """Draw a significance bracket between two x positions."""
+    h = y * 0.03
+    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color='black', linewidth=1.2)
+    ax.text((x1 + x2) / 2, y + h * 1.2, _pval_to_stars(p_val),
+            ha='center', va='bottom', fontsize=fontsize)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PLOT — both absolute and change-from-baseline side by side
+# PLOT — absolute mobility only (publication grade)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def plot_mobility(
     psi_data:           dict[str, list[float]],
     ctrl_data:          dict[str, list[float]],
     mobility_threshold: float = 5.0,
+    title:              str   = 'Mobility During Recording',
+    ylabel:             str   = 'Fraction of Time',
+    output_path:        str   | None = None,
 ) -> plt.Figure:
     """
-    Two side-by-side plots:
-      Left  — absolute fraction of time mobile/immobile during recording
-      Right — change from baseline (recording - baseline)
+    Clean publication-grade bar plot: mobile vs immobile, psi vs ctrl.
+    Paired dots connected by lines. Significance bar per category.
 
     Parameters
     ----------
-    psi_data  : output of collect_mobility_data() for psi animals
-    ctrl_data : output of collect_mobility_data() for ctrl animals
+    psi_data    : output of collect_mobility_data() for psi animals
+    ctrl_data   : output of collect_mobility_data() for ctrl animals
+    output_path : if provided, saves the figure here
     """
-    psi_color  = '#E87722'
-    ctrl_color = '#4878CF'
-    psi_dot    = '#8b3d00'
-    ctrl_dot   = '#1a3d6e'
+    categories  = ['mobile', 'immobile']
+    xlabels     = ['Mobile', 'Immobile']
+    x           = np.arange(len(categories))
+    width       = 0.35
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    psi_color   = '#C1440E'   # warm red (psilocybin)
+    ctrl_color  = '#C8A882'   # tan/beige (vehicle/saline) — matches your reference
+    psi_dot     = '#7a2a08'
+    ctrl_dot    = '#7a6040'
 
-    # Left: absolute fractions
-    psi_abs  = {'mobile': psi_data['mobile'],   'immobile': psi_data['immobile']}
-    ctrl_abs = {'mobile': ctrl_data['mobile'],  'immobile': ctrl_data['immobile']}
-    _bar_plot(axes[0], psi_abs, ctrl_abs,
-              labels=['mobile', 'immobile'],
-              ylabel='Fraction of Time',
-              title=f'Mobility During Recording\n(threshold = {mobility_threshold} cm/s)',
-              psi_color=psi_color, ctrl_color=ctrl_color,
-              psi_dot=psi_dot, ctrl_dot=ctrl_dot)
-    axes[0].set_ylim(0, 1.0)
+    fig, ax = plt.subplots(figsize=(6, 6))
 
-    # Right: change from baseline
-    psi_chg  = {'mobile': psi_data['mobile_change'],   'immobile': psi_data['immobile_change']}
-    ctrl_chg = {'mobile': ctrl_data['mobile_change'],  'immobile': ctrl_data['immobile_change']}
-    _bar_plot(axes[1], psi_chg, ctrl_chg,
-              labels=['mobile', 'immobile'],
-              ylabel='Change in Fraction (Recording − Baseline)',
-              title=f'Change in Mobility from Baseline\n(threshold = {mobility_threshold} cm/s)',
-              psi_color=psi_color, ctrl_color=ctrl_color,
-              psi_dot=psi_dot, ctrl_dot=ctrl_dot)
+    psi_means  = [np.nanmean(psi_data[c])  for c in categories]
+    ctrl_means = [np.nanmean(ctrl_data[c]) for c in categories]
+    psi_sems   = [sem(psi_data[c],  nan_policy='omit') for c in categories]
+    ctrl_sems  = [sem(ctrl_data[c], nan_policy='omit') for c in categories]
 
+    # Bars — ctrl on left, psi on right (matches your reference figure)
+    ax.bar(x - width / 2, ctrl_means, width, yerr=ctrl_sems,
+           color=ctrl_color, capsize=5, zorder=2,
+           error_kw=dict(elinewidth=1.5, ecolor='black'))
+    ax.bar(x + width / 2, psi_means,  width, yerr=psi_sems,
+           color=psi_color,  capsize=5, zorder=2,
+           error_kw=dict(elinewidth=1.5, ecolor='black'))
+
+    # Paired dots + connecting lines
+    rng = np.random.default_rng(42)
+    for i, cat in enumerate(categories):
+        cv = ctrl_data[cat]
+        pv = psi_data[cat]
+        jc = rng.uniform(-0.04, 0.04, size=len(cv))
+        jp = rng.uniform(-0.04, 0.04, size=len(pv))
+
+        ax.scatter(x[i] - width / 2 + jc, cv,
+                   color='white', edgecolors=ctrl_dot, s=55, zorder=5,
+                   linewidths=1.2)
+        ax.scatter(x[i] + width / 2 + jp, pv,
+                   color='white', edgecolors=psi_dot,  s=55, zorder=5,
+                   linewidths=1.2)
+
+        # Connect paired animals
+        for j in range(min(len(cv), len(pv))):
+            ax.plot(
+                [x[i] - width / 2 + jc[j], x[i] + width / 2 + jp[j]],
+                [cv[j], pv[j]],
+                color='gray', linewidth=0.8, alpha=0.5, zorder=3
+            )
+
+        # Significance bar per category (paired t-test)
+        n = min(len(cv), len(pv))
+        if n >= 3:
+            _, p = ttest_rel(cv[:n], pv[:n])
+        else:
+            p = 1.0
+
+        y_top = max(max(cv), max(pv)) * 1.08
+        _add_significance_bar(ax,
+                              x[i] - width / 2,
+                              x[i] + width / 2,
+                              y_top, p)
+
+    # Legend patches
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor=ctrl_color, label='Saline'),
+        Patch(facecolor=psi_color,  label='Psilocybin'),
+    ]
+    ax.legend(handles=legend_elements, fontsize=11, frameon=False)
+
+    # Clean axes
+    ax.set_xticks(x)
+    ax.set_xticklabels(xlabels, fontsize=13)
+    ax.set_ylabel(ylabel, fontsize=13)
+    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13)
+    ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
+    ax.spines[['top', 'right']].set_visible(False)
+    ax.tick_params(axis='both', labelsize=11)
     fig.tight_layout()
+
+    if output_path:
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f'Saved → {output_path}')
+
     return fig
 
 
