@@ -133,7 +133,19 @@ def collect_condition_data(
 
     return collected
 
+def _pval_to_stars(p):
+    if p < 0.001: return '***'
+    if p < 0.01:  return '**'
+    if p < 0.05:  return '*'
+    return 'NS'
 
+
+def _add_significance_bar(ax, x1, x2, y, p_val, fontsize=11):
+    h = abs(y) * 0.05 + 0.05
+    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y],
+            color='black', linewidth=1.2)
+    ax.text((x1 + x2) / 2, y + h * 1.3, _pval_to_stars(p_val),
+            ha='center', va='bottom', fontsize=fontsize)
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 3 — plot
 # ─────────────────────────────────────────────────────────────────────────────
