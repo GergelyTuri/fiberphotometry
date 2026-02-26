@@ -86,7 +86,8 @@ def _draw_heatmap(ax, time_axis, traces, title=''):
     )
 
     # Immobility region shading
-    ax.axvspan(time_axis[0], 0, alpha=0.08, color='gray', zorder=0)
+    ax.axvspan(time_axis[0], -0.001, alpha=0.08, color='gray', zorder=0,
+           label='Immobility')
     ax.axvline(0, color='white', lw=1.8, ls='--', alpha=0.95)
 
     ax.set_ylabel('Trial (sorted by peak)', fontsize=8)

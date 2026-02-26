@@ -1,10 +1,10 @@
 """
-loader.py
+periplot_loader.py
 ─────────────────────────────────────────────────────────────────────────────
 Functions for loading and preprocessing fiber photometry and BORIS behavior data.
 
 Usage:
-    from loader import load_behavior, load_serotonin
+    from periplot_loader import load_behavior, load_serotonin
 
 BORIS export notes:
     - Export as "Observations list" CSV with all fields
@@ -12,25 +12,38 @@ BORIS export notes:
     - Time column = absolute video timestamp; script auto-corrects to recording start
 
 Serotonin CSV notes:
-    - Expected columns: 'time' (seconds), 'dff' (ΔF/F or z-score from your preprocessing)
-    - ~100 Hz sampling rate assumed; any rate works automatically
+    - Expected columns: 'Time (s)', 'Z-score' (or similar variations)
+    - Any sampling rate works — detected automatically
 """
 
 import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter1d
 
+# ── Per-animal behavior code remapping ───────────────────────────────────────
+# Standardizes inconsistent BORIS coding across animals
+# Final standard: e=Exploring, g=Grooming, r=Rearing, eat=Eating, s=Nose out of box
+BEHAVIOR_REMAP = {
+    'nia11': {'p': 'e', 'y': 'eat'},
+    'nia2':  {'p': 'e', 'y': 'eat'},
+    'nia4':  {'p': 'e', 'y': 'eat'},
+    'nia44': {'y': 'eat'},
+    'nia41': {'y': 'eat'},
+    'nia35': {'y': 'eat'},
+}
+
 # ── Behavior label map ────────────────────────────────────────────────────────
-# Edit here to match your BORIS behavior codes
 BEHAVIOR_LABELS = {
-    'e': 'Exploring',
-    'g': 'Grooming',
-    'd': 'Digging',
-    'r': 'Rearing',
+    'e':   'Exploring',
+    'g':   'Grooming',
+    'r':   'Rearing',
+    'd':   'Digging',
+    'eat': 'Eating',
+    's':   'Nose out of box',
 }
 
 # ── Default parameters ────────────────────────────────────────────────────────
-DEFAULT_MIN_BOUT_S  = 3.0   # minimum bout duration to keep (seconds)
+DEFAULT_MIN_BOUT_S   = 3.0  # minimum bout duration to keep (seconds)
 DEFAULT_SMOOTH_SIGMA = 2    # gaussian smoothing kernel width (samples)
 
 
@@ -38,7 +51,7 @@ DEFAULT_SMOOTH_SIGMA = 2    # gaussian smoothing kernel width (samples)
 # BEHAVIOR LOADING
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_behavior(path, min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
+def load_behavior(path, animal_id='', min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
     """
     Load a BORIS-exported CSV and return behavior bout epochs.
 
@@ -46,6 +59,8 @@ def load_behavior(path, min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
     ----------
     path : str
         Path to BORIS CSV file.
+    animal_id : str
+        Animal identifier — used to apply per-animal behavior code remapping.
     min_bout_s : float
         Minimum bout duration in seconds. Bouts shorter than this are dropped.
     verbose : bool
@@ -57,22 +72,22 @@ def load_behavior(path, min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
         Keys = behavior code (str), values = np.ndarray of shape (n_bouts, 2)
         where column 0 = onset (s), column 1 = offset (s), relative to
         recording start (t=0).
-
-    Notes
-    -----
-    Time alignment: BORIS stores absolute video timestamps. This function
-    subtracts the recording start time so t=0 = start of photometry recording.
-    If your BORIS file has a non-zero 'Time offset (s)' field, that is also
-    applied automatically.
     """
     df = pd.read_csv(path)
+
+    # ── Per-animal behavior code remapping ────────────────────────────────
+    remap = BEHAVIOR_REMAP.get(animal_id, {})
+    if remap:
+        df['Behavior'] = df['Behavior'].replace(remap)
+        if verbose:
+            print(f"  Applied behavior remap for {animal_id}: {remap}")
 
     # ── Time alignment ────────────────────────────────────────────────────
     time_offset = float(df['Time offset (s)'].iloc[0]) if 'Time offset (s)' in df.columns else 0.0
     time_col = next((c for c in df.columns if 'time' in c.lower()), None)
     if time_col is None:
         raise KeyError(f"No time column found. Columns: {list(df.columns)}")
-    rec_start   = df[time_col].min() - time_offset
+    rec_start      = df[time_col].min() - time_offset
     df['time_adj'] = df[time_col] - rec_start
 
     bouts = {}
@@ -93,7 +108,7 @@ def load_behavior(path, min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
         valid     = pairs[durations >= min_bout_s]
 
         if verbose:
-            label = BEHAVIOR_LABELS.get(beh_code, beh_code)
+            label     = BEHAVIOR_LABELS.get(beh_code, beh_code)
             n_dropped = len(pairs) - len(valid)
             print(f"  [{beh_code}] {label}: "
                   f"{len(pairs)} bouts total, "
@@ -115,30 +130,15 @@ def load_serotonin(path, smooth=True, smooth_sigma=DEFAULT_SMOOTH_SIGMA, verbose
     """
     Load a serotonin fiber photometry CSV.
 
-    Parameters
-    ----------
-    path : str
-        Path to CSV with columns 'time' and 'dff'.
-    smooth : bool
-        Apply light gaussian smoothing for visualization (does not affect
-        per-trial z-score normalization in the extractor).
-    smooth_sigma : float
-        Sigma for gaussian kernel in samples.
-    verbose : bool
-        Print signal summary.
-
     Returns
     -------
-    t : np.ndarray
-        Time vector (seconds).
-    dff : np.ndarray
-        ΔF/F signal (smoothed if smooth=True).
-    sr : float
-        Estimated sampling rate (Hz).
+    t : np.ndarray       — time vector (seconds)
+    dff : np.ndarray     — z-score signal (smoothed if smooth=True)
+    sr : float           — sampling rate (Hz)
     """
-    df  = pd.read_csv(path)
+    df = pd.read_csv(path)
 
-# Flexible time column detection
+    # Flexible time column detection
     time_col = None
     for candidate in ['time', 'Time', 'Time (s)', 'time (s)', 'timestamp', 'Timestamp']:
         if candidate in df.columns:
@@ -149,7 +149,8 @@ def load_serotonin(path, smooth=True, smooth_sigma=DEFAULT_SMOOTH_SIGMA, verbose
 
     # Flexible signal column detection
     dff_col = None
-    for candidate in ['dff', 'DFF', 'dF/F', 'df/f', 'signal', 'Signal', 'zscore', 'z_score', 'Z-score', 'Z_score']:
+    for candidate in ['dff', 'DFF', 'dF/F', 'df/f', 'signal', 'Signal',
+                       'zscore', 'z_score', 'Z-score', 'Z_score']:
         if candidate in df.columns:
             dff_col = candidate
             break
@@ -162,7 +163,6 @@ def load_serotonin(path, smooth=True, smooth_sigma=DEFAULT_SMOOTH_SIGMA, verbose
     t   = df[time_col].values.astype(float)
     dff = df[dff_col].values.astype(float)
 
-
     # Estimate sampling rate from median interval
     sr = 1.0 / np.median(np.diff(t))
 
@@ -173,7 +173,7 @@ def load_serotonin(path, smooth=True, smooth_sigma=DEFAULT_SMOOTH_SIGMA, verbose
         print(f"  Signal: {len(t)} samples | "
               f"{t[-1]:.1f}s duration | "
               f"~{sr:.1f} Hz | "
-              f"dF/F range [{dff.min():.2f}, {dff.max():.2f}]")
+              f"z-score range [{dff.min():.2f}, {dff.max():.2f}]")
 
     return t, dff, sr
 
