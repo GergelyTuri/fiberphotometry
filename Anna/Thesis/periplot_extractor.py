@@ -1,99 +1,171 @@
 """
-extractor.py
+periplot_extractor.py
 ─────────────────────────────────────────────────────────────────────────────
-Functions for extracting peri-event serotonin traces aligned to behavior
-onset or offset, with per-trial baseline normalization and quantification.
+Extracts peri-event serotonin traces aligned to post-immobility behavior onset.
+
+Core logic:
+  1. Find gaps ≥ MIN_IMMOBILITY_S between any coded behaviors → immobility epochs
+  2. Align to end of each gap = onset of the next behavior
+  3. Split trials by which behavior follows (e, g, d, r)
+  4. Window: pre_s before → post_s after (default −10s to +50s)
+  5. NO per-trial normalization — signal is already globally z-scored
 
 Usage:
-    from extractor import extract_peri_event, quantify_trials, build_animal_dataset
+    from periplot_extractor import (find_immobility_gaps,
+                                    extract_post_immobility,
+                                    build_animal_dataset,
+                                    save_dataset, load_dataset)
 """
 
 import numpy as np
 from scipy.stats import sem as scipy_sem
 
-# ── Default window parameters (seconds) ──────────────────────────────────────
-DEFAULT_PRE_S         = 5.0   # window before event
-DEFAULT_POST_S        = 10.0  # window after event
-DEFAULT_BASELINE_PRE  = 3.0   # baseline window start (seconds before event)
-DEFAULT_BASELINE_END  = 0.5   # baseline window end (seconds before event)
-DEFAULT_QUANT_WINDOW  = (0.0, 5.0)  # post-event window for AUC / peak quantification
+# ── Default parameters ────────────────────────────────────────────────────────
+DEFAULT_MIN_IMMOBILITY_S = 10.0   # minimum gap to count as immobility
+DEFAULT_PRE_S            = 10.0   # window before behavior onset (into immobility)
+DEFAULT_POST_S           = 50.0   # window after behavior onset (full recovery)
+DEFAULT_QUANT_WINDOW     = (0.0, 15.0)  # post-onset window for peak/AUC stats
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CORE EXTRACTION
+# STEP 1 — FIND IMMOBILITY GAPS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def extract_peri_event(
+def find_immobility_gaps(bouts, min_immobility_s=DEFAULT_MIN_IMMOBILITY_S, verbose=True):
+    """
+    Find gaps between ANY coded behavior bouts that are ≥ min_immobility_s.
+    These gaps = immobility epochs.
+
+    Parameters
+    ----------
+    bouts : dict
+        Output of periplot_loader.load_behavior().
+        Keys = behavior code, values = np.ndarray (n_bouts, 2) of [onset, offset].
+    min_immobility_s : float
+        Minimum gap duration to count as immobility.
+    verbose : bool
+
+    Returns
+    -------
+    gaps : np.ndarray, shape (n_gaps, 2)
+        Each row = [gap_start, gap_end] in seconds.
+        gap_end = onset of the behavior that follows.
+    next_behaviors : list of str
+        Behavior code of the behavior that starts at each gap_end.
+    """
+    # Flatten all bouts from all behaviors into one sorted list of (onset, offset, code)
+    all_events = []
+    for code, bout_array in bouts.items():
+        for onset, offset in bout_array:
+            all_events.append((onset, offset, code))
+
+    if not all_events:
+        return np.empty((0, 2)), []
+
+    all_events.sort(key=lambda x: x[0])  # sort by onset time
+
+    gaps          = []
+    next_behaviors = []
+
+    for i in range(1, len(all_events)):
+        prev_offset = all_events[i - 1][1]   # end of previous behavior
+        curr_onset  = all_events[i][0]        # start of current behavior
+        curr_code   = all_events[i][2]
+
+        gap_duration = curr_onset - prev_offset
+
+        if gap_duration >= min_immobility_s:
+            gaps.append([prev_offset, curr_onset])
+            next_behaviors.append(curr_code)
+
+    gaps = np.array(gaps) if gaps else np.empty((0, 2))
+
+    if verbose:
+        print(f"  Found {len(gaps)} immobility gaps ≥ {min_immobility_s}s")
+        if len(gaps) > 0:
+            durations = gaps[:, 1] - gaps[:, 0]
+            print(f"  Gap durations: {durations.min():.1f}–{durations.max():.1f}s "
+                  f"(median {np.median(durations):.1f}s)")
+            from collections import Counter
+            counts = Counter(next_behaviors)
+            for code, n in sorted(counts.items()):
+                print(f"    → {code}: {n} trials")
+
+    return gaps, next_behaviors
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2 — EXTRACT TRACES (no per-trial normalization)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def extract_post_immobility(
     t_sero,
     dff_sero,
-    event_times,
-    pre_s          = DEFAULT_PRE_S,
-    post_s         = DEFAULT_POST_S,
-    baseline_pre_s = DEFAULT_BASELINE_PRE,
-    baseline_end_s = DEFAULT_BASELINE_END,
-    align          = 'onset',
-    verbose        = True,
+    gaps,
+    next_behaviors,
+    behavior_code,
+    pre_s  = DEFAULT_PRE_S,
+    post_s = DEFAULT_POST_S,
+    verbose = True,
 ):
     """
-    Extract peri-event serotonin traces aligned to a list of event times.
+    Extract serotonin traces aligned to the END of each immobility gap
+    (= onset of the next behavior), filtered to one behavior type.
 
-    Each trial is independently z-score normalized using a pre-event baseline
-    window, so drift and between-trial differences in baseline do not contaminate
-    the signal.
+    NO per-trial normalization is applied — signal is used as-is.
 
     Parameters
     ----------
     t_sero : np.ndarray
         Photometry time vector (seconds).
     dff_sero : np.ndarray
-        Photometry signal (dF/F).
-    event_times : np.ndarray
-        1D array of event timestamps (seconds, same reference as t_sero).
+        Already-normalized z-score signal.
+    gaps : np.ndarray (n_gaps, 2)
+        Output of find_immobility_gaps().
+    next_behaviors : list of str
+        Output of find_immobility_gaps().
+    behavior_code : str
+        Which behavior to extract trials for (e.g. 'e').
     pre_s : float
-        Seconds before event to include in window.
+        Seconds before behavior onset to include (looking back into immobility).
     post_s : float
-        Seconds after event to include in window.
-    baseline_pre_s : float
-        Baseline window starts this many seconds before event.
-    baseline_end_s : float
-        Baseline window ends this many seconds before event.
-        Window = [event - baseline_pre_s : event - baseline_end_s]
-    align : str
-        Label for the alignment type ('onset' or 'offset'), used for printing only.
+        Seconds after behavior onset to include.
     verbose : bool
-        Print extraction summary.
 
     Returns
     -------
     time_axis : np.ndarray
-        Time relative to event (seconds), shape (n_samples,).
-    traces_z : np.ndarray
-        Per-trial z-scored traces, shape (n_valid_trials, n_samples).
-    traces_dff : np.ndarray
-        Per-trial baseline-subtracted dF/F traces, shape (n_valid_trials, n_samples).
+        Time relative to behavior onset (s). Negative = during immobility.
+    traces : np.ndarray
+        Shape (n_trials, n_samples). Raw z-score, no normalization.
+    gap_durations : np.ndarray
+        Duration of immobility gap for each kept trial.
     trial_meta : list of dict
-        Per-trial metadata: {'event_time', 'baseline_mean', 'baseline_std', 'idx'}.
+        Per-trial metadata.
     """
     sr      = 1.0 / np.median(np.diff(t_sero))
     n_pre   = int(pre_s  * sr)
     n_post  = int(post_s * sr)
     n_total = n_pre + n_post
 
-    # Build common time axis
     time_axis = np.linspace(-pre_s, post_s, n_total)
 
-    traces_z   = []
-    traces_dff = []
-    trial_meta = []
-    n_skipped  = 0
+    traces        = []
+    gap_durations = []
+    trial_meta    = []
+    n_skipped     = 0
 
-    for ev_t in event_times:
-        # Find nearest sample index
-        idx = np.searchsorted(t_sero, ev_t)
+    for i, (gap, next_beh) in enumerate(zip(gaps, next_behaviors)):
+        if next_beh != behavior_code:
+            continue
+
+        event_t      = gap[1]   # end of gap = onset of next behavior
+        gap_duration = gap[1] - gap[0]
+
+        idx     = np.searchsorted(t_sero, event_t)
         i_start = idx - n_pre
         i_end   = idx + n_post
 
-        # Skip if window extends outside recording
         if i_start < 0 or i_end > len(dff_sero):
             n_skipped += 1
             continue
@@ -103,140 +175,56 @@ def extract_peri_event(
             n_skipped += 1
             continue
 
-        # Per-trial baseline
-        bl_start_idx = int((pre_s - baseline_pre_s) * sr)
-        bl_end_idx   = int((pre_s - baseline_end_s)  * sr)
-        baseline_samples = trial[bl_start_idx:bl_end_idx]
-
-        if len(baseline_samples) < 5:
-            n_skipped += 1
-            continue
-
-        bl_mean = np.mean(baseline_samples)
-        bl_std  = np.std(baseline_samples)
-
-        dff_trial = trial - bl_mean  # baseline-subtracted dF/F
-
-        if bl_std > 1e-6:
-            z_trial = dff_trial / bl_std
-        else:
-            z_trial = dff_trial  # fallback if std is ~0
-
-        traces_z.append(z_trial)
-        traces_dff.append(dff_trial)
+        traces.append(trial)
+        gap_durations.append(gap_duration)
         trial_meta.append({
-            'event_time':    ev_t,
-            'baseline_mean': bl_mean,
-            'baseline_std':  bl_std,
-            'sample_idx':    idx,
+            'event_time':    event_t,
+            'gap_start':     gap[0],
+            'gap_duration':  gap_duration,
+            'behavior_code': next_beh,
         })
 
     if verbose:
-        n_valid = len(traces_z)
-        print(f"  {align} alignment: {n_valid}/{len(event_times)} trials extracted "
+        n_valid = len(traces)
+        print(f"  [{behavior_code}] {n_valid} trials extracted "
               f"({n_skipped} skipped — out of recording bounds)")
 
-    if not traces_z:
-        empty = np.empty((0, n_total))
-        return time_axis, empty, empty, trial_meta
+    if not traces:
+        return time_axis, np.empty((0, n_total)), np.array([]), []
 
-    return time_axis, np.array(traces_z), np.array(traces_dff), trial_meta
-
-
-def extract_onset_and_offset(
-    t_sero,
-    dff_sero,
-    bouts,
-    behavior_code,
-    **kwargs,
-):
-    """
-    Convenience wrapper: extract both onset- and offset-aligned traces for one behavior.
-
-    Parameters
-    ----------
-    t_sero, dff_sero : as in extract_peri_event
-    bouts : dict
-        Output of loader.load_behavior()
-    behavior_code : str
-        Which behavior to extract (e.g. 'e').
-    **kwargs :
-        Passed through to extract_peri_event (pre_s, post_s, etc.)
-
-    Returns
-    -------
-    dict with keys 'time_axis', 'onset_z', 'onset_dff', 'offset_z', 'offset_dff',
-    'onset_meta', 'offset_meta', 'durations'
-    """
-    bout_array = bouts.get(behavior_code, np.array([]))
-    if len(bout_array) == 0:
-        print(f"  No valid bouts found for behavior '{behavior_code}'")
-        return None
-
-    onsets    = bout_array[:, 0]
-    offsets   = bout_array[:, 1]
-    durations = offsets - onsets
-
-    t_ax, on_z, on_dff, on_meta = extract_peri_event(
-        t_sero, dff_sero, onsets, align='onset', **kwargs)
-    _,    off_z, off_dff, off_meta = extract_peri_event(
-        t_sero, dff_sero, offsets, align='offset', **kwargs)
-
-    return {
-        'time_axis':   t_ax,
-        'onset_z':     on_z,
-        'onset_dff':   on_dff,
-        'onset_meta':  on_meta,
-        'offset_z':    off_z,
-        'offset_dff':  off_dff,
-        'offset_meta': off_meta,
-        'durations':   durations,
-        'n_bouts':     len(bout_array),
-    }
+    return time_axis, np.array(traces), np.array(gap_durations), trial_meta
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# QUANTIFICATION
+# STEP 3 — QUANTIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def quantify_trials(
-    time_axis,
-    traces_z,
-    quant_window = DEFAULT_QUANT_WINDOW,
-):
+def quantify_trials(time_axis, traces, quant_window=DEFAULT_QUANT_WINDOW):
     """
-    Quantify signal in a post-event window per trial.
+    Quantify peak z-score and AUC in a post-onset window.
 
     Parameters
     ----------
     time_axis : np.ndarray
-        Time vector relative to event.
-    traces_z : np.ndarray
-        z-scored traces, shape (n_trials, n_samples).
-    quant_window : tuple (float, float)
-        (start, end) in seconds relative to event for quantification.
+    traces : np.ndarray (n_trials, n_samples)
+    quant_window : tuple (start_s, end_s) relative to behavior onset
 
     Returns
     -------
-    dict with per-trial and summary statistics:
-        'peak'     : peak z-score per trial
-        'auc'      : area under curve per trial (trapezoidal)
-        'mean_peak': grand mean of peak values
-        'sem_peak' : SEM of peak values
-        'mean_auc' : grand mean of AUC
-        'sem_auc'  : SEM of AUC
-        'n'        : number of trials
+    dict with 'peak', 'auc', 'mean_peak', 'sem_peak', 'mean_auc', 'sem_auc', 'n'
     """
-    if len(traces_z) == 0:
+    if len(traces) == 0:
         return {k: np.nan for k in
                 ['peak', 'auc', 'mean_peak', 'sem_peak', 'mean_auc', 'sem_auc', 'n']}
 
-    q_mask = (time_axis >= quant_window[0]) & (time_axis <= quant_window[1])
-    t_q    = time_axis[q_mask]
-    tr_q   = traces_z[:, q_mask]
+    q_mask    = (time_axis >= quant_window[0]) & (time_axis <= quant_window[1])
+    t_q       = time_axis[q_mask]
+    tr_q      = traces[:, q_mask]
 
     peak_vals = np.max(tr_q, axis=1)
-    auc_vals  = np.trapezoid(tr_q, t_q, axis=1) if hasattr(np, 'trapezoid') else np.trapz(tr_q, t_q, axis=1)
+    auc_vals  = (np.trapezoid(tr_q, t_q, axis=1)
+                 if hasattr(np, 'trapezoid')
+                 else np.trapz(tr_q, t_q, axis=1))
 
     return {
         'peak':      peak_vals,
@@ -250,27 +238,26 @@ def quantify_trials(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MULTI-ANIMAL DATASET BUILDER
+# STEP 4 — BUILD FULL ANIMAL DATASET
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_animal_dataset(animal_id, condition, bouts, t_sero, dff_sero, **kwargs):
+def build_animal_dataset(
+    animal_id,
+    condition,
+    bouts,
+    t_sero,
+    dff_sero,
+    min_immobility_s = DEFAULT_MIN_IMMOBILITY_S,
+    pre_s            = DEFAULT_PRE_S,
+    post_s           = DEFAULT_POST_S,
+    quant_window     = DEFAULT_QUANT_WINDOW,
+    verbose          = True,
+):
     """
-    Package all extracted traces for one animal into a single dataset dict.
-    This is the object you save per animal and then pass to the plotter for
-    group-level figures.
-
-    Parameters
-    ----------
-    animal_id : str
-        Unique animal identifier (e.g. 'nia4').
-    condition : str
-        Condition label (e.g. 'saline', 'psi').
-    bouts : dict
-        Output of loader.load_behavior().
-    t_sero, dff_sero : arrays
-        Output of loader.load_serotonin().
-    **kwargs :
-        Passed to extract_onset_and_offset (pre_s, post_s, etc.)
+    Full pipeline for one animal:
+      1. Find immobility gaps
+      2. Extract traces per post-immobility behavior type
+      3. Quantify
 
     Returns
     -------
@@ -278,44 +265,71 @@ def build_animal_dataset(animal_id, condition, bouts, t_sero, dff_sero, **kwargs
         {
           'animal_id'  : str,
           'condition'  : str,
+          'gaps'       : np.ndarray (n_gaps, 2),
+          'next_behaviors' : list of str,
           'behaviors'  : {
               beh_code : {
-                  'time_axis', 'onset_z', 'onset_dff',
-                  'offset_z', 'offset_dff', 'durations', 'n_bouts',
-                  'quant_onset', 'quant_offset'   ← from quantify_trials
-              }, ...
+                  'time_axis', 'traces', 'gap_durations',
+                  'trial_meta', 'quant'
+              }
           }
         }
     """
     print(f"\n── Building dataset: {animal_id} | {condition} ──")
+
+    # 1. Find gaps
+    print("\n  Finding immobility gaps...")
+    gaps, next_behaviors = find_immobility_gaps(
+        bouts, min_immobility_s=min_immobility_s, verbose=verbose)
+
     dataset = {
-        'animal_id': animal_id,
-        'condition': condition,
-        'behaviors': {},
+        'animal_id':      animal_id,
+        'condition':      condition,
+        'gaps':           gaps,
+        'next_behaviors': next_behaviors,
+        'behaviors':      {},
     }
 
-    for beh_code in bouts:
-        print(f"\n  Behavior: {beh_code}")
-        result = extract_onset_and_offset(
-            t_sero, dff_sero, bouts, beh_code, **kwargs)
+    if len(gaps) == 0:
+        print("  No immobility gaps found — check your data or lower min_immobility_s")
+        return dataset
 
-        if result is None:
-            continue
+    # 2. Extract per behavior type
+    behavior_codes = sorted(set(next_behaviors))
+    print(f"\n  Extracting traces (pre={pre_s}s, post={post_s}s, no normalization)...")
 
-        result['quant_onset']  = quantify_trials(result['time_axis'], result['onset_z'])
-        result['quant_offset'] = quantify_trials(result['time_axis'], result['offset_z'])
+    for beh_code in behavior_codes:
+        time_axis, traces, gap_durs, meta = extract_post_immobility(
+            t_sero, dff_sero, gaps, next_behaviors,
+            behavior_code = beh_code,
+            pre_s         = pre_s,
+            post_s        = post_s,
+            verbose       = verbose,
+        )
 
-        dataset['behaviors'][beh_code] = result
+        quant = quantify_trials(time_axis, traces, quant_window=quant_window)
+
+        dataset['behaviors'][beh_code] = {
+            'time_axis':     time_axis,
+            'traces':        traces,
+            'gap_durations': gap_durs,
+            'trial_meta':    meta,
+            'quant':         quant,
+        }
 
     return dataset
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SAVE / LOAD
+# ─────────────────────────────────────────────────────────────────────────────
+
 def save_dataset(dataset, path):
-    """Save a dataset dict to a .npz file for later group-level analysis."""
+    """Save dataset dict to .npy file."""
     np.save(path, dataset, allow_pickle=True)
-    print(f"  Saved dataset → {path}")
+    print(f"  Saved → {path}")
 
 
 def load_dataset(path):
-    """Load a previously saved dataset .npy file."""
+    """Load a saved dataset .npy file."""
     return np.load(path, allow_pickle=True).item()
