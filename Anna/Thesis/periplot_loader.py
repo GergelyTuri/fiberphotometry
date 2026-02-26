@@ -146,7 +146,7 @@ def load_serotonin(path, smooth=True, smooth_sigma=DEFAULT_SMOOTH_SIGMA, verbose
 
     # Flexible signal column detection
     dff_col = None
-    for candidate in ['dff', 'DFF', 'dF/F', 'df/f', 'signal', 'Signal', 'zscore', 'z_score']:
+    for candidate in ['dff', 'DFF', 'dF/F', 'df/f', 'signal', 'Signal', 'zscore', 'z_score', 'Z-score', 'Z_score']:
         if candidate in df.columns:
             dff_col = candidate
             break
