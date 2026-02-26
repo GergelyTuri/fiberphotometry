@@ -77,7 +77,7 @@ def load_behavior(path, min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
 
     bouts = {}
     for beh_code in sorted(df['Behavior'].unique()):
-        events = df[df['Behavior'] == beh_code]['time_adj'].sort_values().valuess
+        events = df[df['Behavior'] == beh_code]['time_adj'].sort_values().values
 
         # Warn and trim if odd number of events
         if len(events) % 2 != 0:
