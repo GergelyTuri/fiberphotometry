@@ -86,9 +86,10 @@ def _draw_heatmap(ax, time_axis, traces, title=''):
     )
 
     # Immobility region shading
-    ax.axvspan(time_axis[0], -0.001, alpha=0.08, color='gray', zorder=0,
-           label='Immobility')
-    ax.axvline(0, color='white', lw=1.8, ls='--', alpha=0.95)
+    ax.axvspan(time_axis[0], -0.001, alpha=0.15, color='gray', zorder=0,
+            label='Immobility')
+    ax.axvspan(QUANT_WINDOW[0], QUANT_WINDOW[1], alpha=0.12, color='steelblue', zorder=0,
+            label='Quant window')
 
     ax.set_ylabel('Trial (sorted by peak)', fontsize=8)
     ax.set_xlabel('Time from behavior onset (s)', fontsize=8)
