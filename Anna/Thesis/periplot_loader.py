@@ -84,7 +84,17 @@ def load_behavior(path, animal_id='', min_bout_s=DEFAULT_MIN_BOUT_S, verbose=Tru
 
     # ── Time alignment ────────────────────────────────────────────────────
     time_offset = float(df['Time offset (s)'].iloc[0]) if 'Time offset (s)' in df.columns else 0.0
-    time_col = next((c for c in df.columns if 'time' in c.lower()), None)
+    # Prefer exact 'Time' column, fall back to any column containing 'time'
+# but exclude 'Time offset (s)' which is metadata not timestamps
+    time_col = None
+    for candidate in ['Time', 'time', 'Time (s)', 'time (s)', 'timestamp']:
+        if candidate in df.columns:
+            time_col = candidate
+            break
+    if time_col is None:
+        time_col = next((c for c in df.columns 
+                        if 'time' in c.lower() 
+                        and 'offset' not in c.lower()), None)
     if time_col is None:
         raise KeyError(f"No time column found. Columns: {list(df.columns)}")
     rec_start      = df[time_col].min() - time_offset
