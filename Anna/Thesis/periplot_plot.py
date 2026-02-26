@@ -20,7 +20,7 @@ import matplotlib.gridspec as gridspec
 from matplotlib.colors import TwoSlopeNorm
 from scipy.stats import sem as scipy_sem, ttest_ind, mannwhitneyu
 
-from loader import get_behavior_label
+from periplot_loader import get_behavior_label
 
 # ── Style ─────────────────────────────────────────────────────────────────────
 matplotlib.rcParams.update({
