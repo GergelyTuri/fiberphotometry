@@ -69,12 +69,15 @@ def load_behavior(path, min_bout_s=DEFAULT_MIN_BOUT_S, verbose=True):
 
     # ── Time alignment ────────────────────────────────────────────────────
     time_offset = float(df['Time offset (s)'].iloc[0]) if 'Time offset (s)' in df.columns else 0.0
-    rec_start   = df['Time'].min() - time_offset
-    df['time_adj'] = df['Time'] - rec_start
+    time_col = next((c for c in df.columns if 'time' in c.lower()), None)
+    if time_col is None:
+        raise KeyError(f"No time column found. Columns: {list(df.columns)}")
+    rec_start   = df[time_col].min() - time_offset
+    df['time_adj'] = df[time_col] - rec_start
 
     bouts = {}
     for beh_code in sorted(df['Behavior'].unique()):
-        events = df[df['Behavior'] == beh_code]['time_adj'].sort_values().values
+        events = df[df['Behavior'] == beh_code]['time_adj'].sort_values().valuess
 
         # Warn and trim if odd number of events
         if len(events) % 2 != 0:
