@@ -24,9 +24,9 @@ from scipy.ndimage import gaussian_filter1d
 # Standardizes inconsistent BORIS coding across animals
 # Final standard: e=Exploring, g=Grooming, r=Rearing, eat=Eating, s=Nose out of box
 BEHAVIOR_REMAP = {
-    'nia11': {'p': 'e', 'y': 'eat'},
-    'nia2':  {'p': 'e', 'y': 'eat'},
-    'nia4':  {'p': 'e', 'y': 'eat'},
+    'nia11': {'e': 'eat', 'p': 'e', 'y': 'eat'},
+    'nia2':  {'e': 'eat', 'p': 'e', 'y': 'eat'},
+    'nia4':  {'e': 'eat', 'p': 'e', 'y': 'eat'},
     'nia44': {'y': 'eat'},
     'nia41': {'y': 'eat'},
     'nia35': {'y': 'eat'},
