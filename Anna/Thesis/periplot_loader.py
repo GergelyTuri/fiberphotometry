@@ -134,8 +134,31 @@ def load_serotonin(path, smooth=True, smooth_sigma=DEFAULT_SMOOTH_SIGMA, verbose
         Estimated sampling rate (Hz).
     """
     df  = pd.read_csv(path)
-    t   = df['time'].values.astype(float)
-    dff = df['dff'].values.astype(float)
+
+# Flexible time column detection
+    time_col = None
+    for candidate in ['time', 'Time', 'Time (s)', 'time (s)', 'timestamp', 'Timestamp']:
+        if candidate in df.columns:
+            time_col = candidate
+            break
+    if time_col is None:
+        raise KeyError(f"No time column found. Columns present: {list(df.columns)}")
+
+    # Flexible signal column detection
+    dff_col = None
+    for candidate in ['dff', 'DFF', 'dF/F', 'df/f', 'signal', 'Signal', 'zscore', 'z_score']:
+        if candidate in df.columns:
+            dff_col = candidate
+            break
+    if dff_col is None:
+        raise KeyError(f"No signal column found. Columns present: {list(df.columns)}")
+
+    if verbose:
+        print(f"  Using columns: time='{time_col}', signal='{dff_col}'")
+
+    t   = df[time_col].values.astype(float)
+    dff = df[dff_col].values.astype(float)
+
 
     # Estimate sampling rate from median interval
     sr = 1.0 / np.median(np.diff(t))
