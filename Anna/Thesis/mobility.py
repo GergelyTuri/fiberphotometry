@@ -109,8 +109,8 @@ def plot_mobility(
     output_path:        str   | None = None,
 ) -> plt.Figure:
     """
-    Clean publication-grade bar plot: mobile vs immobile, psi vs ctrl.
-    Paired dots connected by lines. Significance bar per category.
+    Clean publication-grade bar plot: mobile only, psi vs ctrl.
+    Paired dots connected by lines. Significance bar.
 
     Parameters
     ----------
@@ -118,66 +118,63 @@ def plot_mobility(
     ctrl_data   : output of collect_mobility_data() for ctrl animals
     output_path : if provided, saves the figure here
     """
-    categories  = ['mobile', 'immobile']
-    xlabels     = ['Mobile', 'Immobile']
-    x           = np.arange(len(categories))
-    width       = 0.35
-
     ctrl_color  = '#BEBEBE'   # light grey (saline)
     psi_color   = '#606060'   # dark grey (psilocybin)
-    ctrl_dot    = 'black'
-    psi_dot     = 'black'
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    psi_means  = [np.nanmean(psi_data[c])  for c in categories]
-    ctrl_means = [np.nanmean(ctrl_data[c]) for c in categories]
-    psi_sems   = [sem(psi_data[c],  nan_policy='omit') for c in categories]
-    ctrl_sems  = [sem(ctrl_data[c], nan_policy='omit') for c in categories]
+    # Get mobile data only
+    cv = ctrl_data['mobile']
+    pv = psi_data['mobile']
+    
+    ctrl_mean = np.nanmean(cv)
+    psi_mean = np.nanmean(pv)
+    ctrl_sem = sem(cv, nan_policy='omit')
+    psi_sem = sem(pv, nan_policy='omit')
 
-    # Bars — ctrl on left, psi on right (matches your reference figure)
-    ax.bar(x - width / 2, ctrl_means, width, yerr=ctrl_sems,
+    # Bars — ctrl on left, psi on right
+    x = np.array([0, 1])
+    width = 0.35
+    
+    ax.bar(x[0] - width / 2, ctrl_mean, width, yerr=ctrl_sem,
            color=ctrl_color, capsize=5, zorder=2,
            error_kw=dict(elinewidth=1.5, ecolor='black'))
-    ax.bar(x + width / 2, psi_means,  width, yerr=psi_sems,
-           color=psi_color,  capsize=5, zorder=2,
+    ax.bar(x[1] + width / 2, psi_mean, width, yerr=psi_sem,
+           color=psi_color, capsize=5, zorder=2,
            error_kw=dict(elinewidth=1.5, ecolor='black'))
 
     # Paired dots + connecting lines
     rng = np.random.default_rng(42)
-    for i, cat in enumerate(categories):
-        cv = ctrl_data[cat]
-        pv = psi_data[cat]
-        jc = rng.uniform(-0.04, 0.04, size=len(cv))
-        jp = rng.uniform(-0.04, 0.04, size=len(pv))
+    jc = rng.uniform(-0.04, 0.04, size=len(cv))
+    jp = rng.uniform(-0.04, 0.04, size=len(pv))
 
-        ax.scatter(x[i] - width / 2 + jc, cv,
-                   color='white', edgecolors='black', s=55, zorder=5,
-                   linewidths=1.2)
-        ax.scatter(x[i] + width / 2 + jp, pv,
-                   color='white', edgecolors='black', s=55, zorder=5,
-                   linewidths=1.2)
+    ax.scatter(x[0] - width / 2 + jc, cv,
+               color='white', edgecolors='black', s=55, zorder=5,
+               linewidths=1.2)
+    ax.scatter(x[1] + width / 2 + jp, pv,
+               color='white', edgecolors='black', s=55, zorder=5,
+               linewidths=1.2)
 
-        # Connect paired animals
-        for j in range(min(len(cv), len(pv))):
-            ax.plot(
-                [x[i] - width / 2 + jc[j], x[i] + width / 2 + jp[j]],
-                [cv[j], pv[j]],
-                color='gray', linewidth=0.8, alpha=0.5, zorder=3
-            )
+    # Connect paired animals
+    for j in range(min(len(cv), len(pv))):
+        ax.plot(
+            [x[0] - width / 2 + jc[j], x[1] + width / 2 + jp[j]],
+            [cv[j], pv[j]],
+            color='gray', linewidth=0.8, alpha=0.5, zorder=3
+        )
 
-        # Significance bar per category (paired t-test)
-        n = min(len(cv), len(pv))
-        if n >= 3:
-            _, p = ttest_rel(cv[:n], pv[:n])
-        else:
-            p = 1.0
+    # Significance bar (paired t-test)
+    n = min(len(cv), len(pv))
+    if n >= 3:
+        _, p = ttest_rel(cv[:n], pv[:n])
+    else:
+        p = 1.0
 
-        y_top = max(max(cv), max(pv)) * 1.08
-        _add_significance_bar(ax,
-                              x[i] - width / 2,
-                              x[i] + width / 2,
-                              y_top, p)
+    y_top = max(ctrl_mean, psi_mean) * 1.08
+    _add_significance_bar(ax,
+                          x[0] - width / 2,
+                          x[1] + width / 2,
+                          y_top, p)
 
     # Legend patches
     from matplotlib.patches import Patch
@@ -189,7 +186,7 @@ def plot_mobility(
 
     # Clean axes
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=13)
+    ax.set_xticklabels(['Saline', 'Psilocybin'], fontsize=13)
     ax.set_ylabel(ylabel, fontsize=13)
     ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13)
     ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
