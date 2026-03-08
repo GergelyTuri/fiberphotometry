@@ -109,20 +109,36 @@ def plot_mobility_thesis(
     fig : matplotlib Figure
     """
     
-    # Extract mobile fraction data
-    ctrl_mobile = np.array(ctrl_data['mobile'])
-    psi_mobile  = np.array(psi_data['mobile'])
+    # Extract mobile fraction data (keep as lists initially to track indices)
+    ctrl_mobile_list = list(ctrl_data['mobile'])
+    psi_mobile_list  = list(psi_data['mobile'])
     
-    # Remove outliers if requested
+    # Remove outliers if requested (track which indices to keep)
     if remove_outliers:
-        ctrl_mobile_orig_len = len(ctrl_mobile)
-        psi_mobile_orig_len = len(psi_mobile)
+        ctrl_mobile_orig_len = len(ctrl_mobile_list)
+        psi_mobile_orig_len = len(psi_mobile_list)
         
-        ctrl_mobile = remove_outliers_iqr(ctrl_mobile, k=outlier_k)
-        psi_mobile  = remove_outliers_iqr(psi_mobile, k=outlier_k)
+        # Find indices to keep
+        ctrl_array = np.array(ctrl_mobile_list)
+        psi_array = np.array(psi_mobile_list)
+        
+        Q1_c, Q3_c = np.percentile(ctrl_array, 25), np.percentile(ctrl_array, 75)
+        IQR_c = Q3_c - Q1_c
+        ctrl_keep = (ctrl_array >= Q1_c - outlier_k * IQR_c) & (ctrl_array <= Q3_c + outlier_k * IQR_c)
+        
+        Q1_p, Q3_p = np.percentile(psi_array, 25), np.percentile(psi_array, 75)
+        IQR_p = Q3_p - Q1_p
+        psi_keep = (psi_array >= Q1_p - outlier_k * IQR_p) & (psi_array <= Q3_p + outlier_k * IQR_p)
+        
+        # Keep only the good indices from both
+        ctrl_mobile = ctrl_array[ctrl_keep]
+        psi_mobile = psi_array[psi_keep]
         
         print(f'Control: {len(ctrl_mobile)}/{ctrl_mobile_orig_len} animals retained (removed {ctrl_mobile_orig_len - len(ctrl_mobile)})')
         print(f'Psilocybin: {len(psi_mobile)}/{psi_mobile_orig_len} animals retained (removed {psi_mobile_orig_len - len(psi_mobile)})')
+    else:
+        ctrl_mobile = np.array(ctrl_mobile_list)
+        psi_mobile = np.array(psi_mobile_list)
     
     # Compute statistics
     ctrl_mean = np.nanmean(ctrl_mobile)
@@ -156,7 +172,7 @@ def plot_mobility_thesis(
            color=psi_color, edgecolor='black', linewidth=1.5, capsize=6,
            error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
     
-    # Overlay individual data points (jittered)
+    # Overlay individual data points (jittered) — AFTER outlier removal
     rng = np.random.default_rng(42)
     jitter_strength = 0.04
     
