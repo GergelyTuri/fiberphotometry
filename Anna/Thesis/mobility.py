@@ -134,7 +134,7 @@ def plot_mobility(
 
     # Bars — ctrl on left, psi on right
     x = np.array([0, 1])
-    width = 0.35
+    width = 0.15
     
     ax.bar(x[0] - width / 2, ctrl_mean, width, yerr=ctrl_sem,
            color=ctrl_color, capsize=5, zorder=2,
