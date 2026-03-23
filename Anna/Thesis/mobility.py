@@ -4,11 +4,7 @@ mobility_plot.py
 Publication-grade bar plot of mobile vs immobile fraction
 for psi vs ctrl conditions, averaged across animals.
 
-TWO PLOTS:
-  1. Absolute fraction of time mobile/immobile during recording
-  2. Change in mobility fraction from baseline to recording
-
-Styling: clean, minimal, publication-ready with significance bar.
+Styling: professional contrasting blue palette with black/white contrast elements.
 """
 
 import numpy as np
@@ -91,9 +87,9 @@ def _pval_to_stars(p: float) -> str:
 def _add_significance_bar(ax, x1, x2, y, p_val, fontsize=11):
     """Draw a significance bracket between two x positions."""
     h = y * 0.03
-    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color='black', linewidth=1.2)
+    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color='black', linewidth=1.5)
     ax.text((x1 + x2) / 2, y + h * 1.2, _pval_to_stars(p_val),
-            ha='center', va='bottom', fontsize=fontsize)
+            ha='center', va='bottom', fontsize=fontsize, fontweight='bold')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,19 +103,23 @@ def plot_mobility(
     title:              str   = 'Mobility During Recording',
     ylabel:             str   = 'Fraction of Time',
     output_path:        str   | None = None,
+    ctrl_color:         str   = '#A8CCEA',  # light blue (saline)
+    psi_color:          str   = '#2E5090',   # dark blue (psilocybin)
 ) -> plt.Figure:
     """
     Clean publication-grade bar plot: mobile only, psi vs ctrl.
     Paired dots connected by lines. Significance bar.
+    
+    Professional contrasting blue palette with black/white contrast dots.
 
     Parameters
     ----------
     psi_data    : output of collect_mobility_data() for psi animals
     ctrl_data   : output of collect_mobility_data() for ctrl animals
     output_path : if provided, saves the figure here
+    ctrl_color  : hex color for saline condition (default: #A8CCEA - light blue)
+    psi_color   : hex color for psilocybin condition (default: #2E5090 - dark blue)
     """
-    ctrl_color  = '#BEBEBE'   # light grey (saline)
-    psi_color   = '#606060'   # dark grey (psilocybin)
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
@@ -132,35 +132,35 @@ def plot_mobility(
     ctrl_sem = sem(cv, nan_policy='omit')
     psi_sem = sem(pv, nan_policy='omit')
 
-    # Bars — ctrl on left, psi on right
+    # Bars — ctrl on left, psi on right (with black borders)
     x = np.array([0, 0.3])
     width = 0.35
     
     ax.bar(x[0] - width / 2, ctrl_mean, width, yerr=ctrl_sem,
-           color=ctrl_color, capsize=5, zorder=2,
-           error_kw=dict(elinewidth=1.5, ecolor='black'))
+           color=ctrl_color, edgecolor='black', linewidth=1.5, capsize=5, zorder=2,
+           error_kw=dict(elinewidth=2.0, ecolor='black'))
     ax.bar(x[1] + width / 2, psi_mean, width, yerr=psi_sem,
-           color=psi_color, capsize=5, zorder=2,
-           error_kw=dict(elinewidth=1.5, ecolor='black'))
+           color=psi_color, edgecolor='black', linewidth=1.5, capsize=5, zorder=2,
+           error_kw=dict(elinewidth=2.0, ecolor='black'))
 
-    # Paired dots + connecting lines
+    # Paired dots + connecting lines (black fill with white outline to pop)
     rng = np.random.default_rng(42)
     jc = rng.uniform(-0.04, 0.04, size=len(cv))
     jp = rng.uniform(-0.04, 0.04, size=len(pv))
 
     ax.scatter(x[0] - width / 2 + jc, cv,
-               color='white', edgecolors='black', s=55, zorder=5,
-               linewidths=1.2)
+               color='black', edgecolors='white', s=75, zorder=5,
+               linewidths=2.0)
     ax.scatter(x[1] + width / 2 + jp, pv,
-               color='white', edgecolors='black', s=55, zorder=5,
-               linewidths=1.2)
+               color='black', edgecolors='white', s=75, zorder=5,
+               linewidths=2.0)
 
     # Connect paired animals
     for j in range(min(len(cv), len(pv))):
         ax.plot(
             [x[0] - width / 2 + jc[j], x[1] + width / 2 + jp[j]],
             [cv[j], pv[j]],
-            color='gray', linewidth=0.8, alpha=0.5, zorder=3
+            color='gray', linewidth=0.8, alpha=0.4, zorder=3
         )
 
     # Significance bar (paired t-test)
@@ -179,18 +179,19 @@ def plot_mobility(
     # Legend patches
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor='#BEBEBE', edgecolor='black', label='Saline'),
-        Patch(facecolor='#606060', edgecolor='black', label='Psilocybin'),
+        Patch(facecolor=ctrl_color, edgecolor='black', linewidth=1.5, label='Saline'),
+        Patch(facecolor=psi_color, edgecolor='black', linewidth=1.5, label='Psilocybin'),
     ]
-    ax.legend(handles=legend_elements, fontsize=11, frameon=False)
+    ax.legend(handles=legend_elements, fontsize=12, frameon=False, loc='upper right')
 
     # Clean axes
     ax.set_xticks(x)
-    ax.set_xticklabels(['Saline', 'Psilocybin'], fontsize=13)
-    ax.set_ylabel(ylabel, fontsize=13)
-    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13)
+    ax.set_xticklabels(['Saline', 'Psilocybin'], fontsize=13, fontweight='bold')
+    ax.set_ylabel(ylabel, fontsize=13, fontweight='bold')
+    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13, fontweight='bold')
     ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
     ax.spines[['top', 'right']].set_visible(False)
+    ax.spines[['left', 'bottom']].set_linewidth(1.2)
     ax.tick_params(axis='both', labelsize=11)
     fig.tight_layout()
 
@@ -199,7 +200,5 @@ def plot_mobility(
         print(f'Saved → {output_path}')
 
     return fig
-# ─────────────────────────────────────────────────────────────────────────────
-# EXAMPLE USAGE
-# ─────────────────────────────────────────────────────────────────────────────
+
 
