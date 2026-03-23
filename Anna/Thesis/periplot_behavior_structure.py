@@ -140,38 +140,94 @@ def bout_duration_figure(animal_datasets, outdir='.', save=True, test='mwu'):
     return None
 
 
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. FRAGMENTATION
+# FIXED FRAGMENTATION FUNCTION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
-                          outdir='.', save=True, test='mwu'):
+def fragmentation_figure_FIXED(animal_datasets, session_duration_s=1800.0,
+                                outdir='.', save=True, test='mwu', debug=False):
     """
-    Three fragmentation metrics per behavior per condition:
-      - Bout count
-      - Bout rate (bouts/min)
-      - Mean inter-bout interval (IBI, s)
+    THREE FRAGMENTATION METRICS (now correctly separated):
+      - Bout count: number of bouts
+      - Bout rate: bouts per minute (= count / session_minutes)
+      - Mean IBI: inter-bout interval in seconds (= mean time between onsets)
 
-    Parameters
-    ----------
-    animal_datasets : list of dict
-        {'animal_id', 'condition', 'bouts'}
-    session_duration_s : float
-        Length of recording session for rate calculation.
+    KEY FIX: Each metric now computes and stores its own per_animal list,
+    preventing cross-contamination between columns.
     """
+    import os
     os.makedirs(outdir, exist_ok=True)
 
     behaviors  = sorted({b for d in animal_datasets for b in d['bouts']})
     conditions = list(dict.fromkeys(d['condition'] for d in animal_datasets))
 
+    # ── DEFINE METRICS (clearer naming) ──────────────────────────────────────
+    def metric_count(durs, onsets, offsets):
+        """Total number of bouts"""
+        return len(durs)
+
+    def metric_rate(durs, onsets, offsets):
+        """Bouts per minute"""
+        return len(durs) / (session_duration_s / 60.0)
+
+    def metric_ibi(durs, onsets, offsets):
+        """Mean inter-bout interval (time between consecutive onsets)"""
+        if len(onsets) > 1:
+            return np.mean(np.diff(onsets))
+        return np.nan
+
     metrics = [
-        ('count',    'Bout count',          lambda durs, onsets, offsets: len(durs)),
-        ('rate',     'Bout rate (per min)', lambda durs, onsets, offsets:
-             len(durs) / (session_duration_s / 60)),
-        ('ibi',      'Mean IBI (s)',        lambda durs, onsets, offsets:
-             np.mean(np.diff(onsets)) if len(onsets) > 1 else np.nan),
+        ('count',    'Bout count',          metric_count),
+        ('rate',     'Bout rate (per min)', metric_rate),
+        ('ibi',      'Mean IBI (s)',        metric_ibi),
     ]
 
+    # ── COMPUTE PER-ANIMAL VALUES FOR EACH METRIC ────────────────────────────
+    # KEY: Separate per_animal list for each metric
+    metric_data = {metric_key: {} for metric_key, _, _ in metrics}
+
+    for beh in behaviors:
+        for metric_key, metric_label, metric_fn in metrics:
+            metric_data[metric_key][beh] = {}
+
+            for cond in conditions:
+                cond_animals = [d for d in animal_datasets
+                                if d['condition'] == cond]
+                
+                # ← FIX: Fresh per_animal list for each metric
+                per_animal = []
+                
+                for animal_idx, d in enumerate(cond_animals):
+                    bouts = d['bouts'].get(beh, np.empty((0, 2)))
+                    
+                    if len(bouts) == 0:
+                        # Handle empty case
+                        val = 0 if metric_key != 'ibi' else np.nan
+                        per_animal.append(val)
+                        if debug:
+                            print(f"  {d['animal_id']} | {cond} | {beh} | {metric_key}: NO DATA → {val}")
+                        continue
+
+                    # Extract bout components
+                    durs    = bouts[:, 1] - bouts[:, 0]
+                    onsets  = bouts[:, 0]
+                    offsets = bouts[:, 1]
+
+                    # Compute metric
+                    val = metric_fn(durs, onsets, offsets)
+                    per_animal.append(val)
+
+                    if debug:
+                        print(f"  {d['animal_id']} | {cond} | {beh} | {metric_key}: {val:.4f}")
+
+                # Store values (filtering NaN for IBI)
+                vals = np.array(per_animal, dtype=float)
+                vals = vals[~np.isnan(vals)]
+                metric_data[metric_key][beh][cond] = vals
+
+    # ── CREATE FIGURE ────────────────────────────────────────────────────────
     fig, axes = plt.subplots(len(behaviors), 3,
                               figsize=(13, 4 * len(behaviors)),
                               gridspec_kw={'hspace': 0.55, 'wspace': 0.40})
@@ -191,26 +247,14 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
 
             cond_vals = {}
             for xi, cond in enumerate(conditions):
-                cond_animals = [d for d in animal_datasets
-                                if d['condition'] == cond]
-                per_animal = []
-                for d in cond_animals:
-                    bouts = d['bouts'].get(beh, np.empty((0, 2)))
-                    if len(bouts) == 0:
-                        per_animal.append(0 if metric_key != 'ibi' else np.nan)
-                        continue
-                    durs    = bouts[:, 1] - bouts[:, 0]
-                    onsets  = bouts[:, 0]
-                    offsets = bouts[:, 1]
-                    per_animal.append(metric_fn(durs, onsets, offsets))
-
-                vals = np.array(per_animal, dtype=float)
-                vals = vals[~np.isnan(vals)]
+                vals = metric_data[metric_key][beh].get(cond, np.array([]))
                 cond_vals[cond] = vals
 
                 color = _cond_color(cond)
                 if len(vals) == 0:
                     continue
+
+                # Plot bar + strip
                 ax.bar(xi, np.mean(vals),
                        yerr=scipy_sem(vals) if len(vals) > 1 else 0,
                        color=color, alpha=0.7, width=0.55, capsize=5,
@@ -219,6 +263,7 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
                 ax.scatter(xi + jitter, vals, color=color, s=45, alpha=0.85,
                            edgecolors='white', linewidths=0.5, zorder=3)
 
+            # Stats
             if test and len(conditions) >= 2:
                 g1 = cond_vals.get(conditions[0], np.array([]))
                 g2 = cond_vals.get(conditions[1], np.array([]))
@@ -238,14 +283,17 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
                              fontweight='bold', color=beh_col)
 
     if save:
-        fname = os.path.join(outdir, 'fragmentation.png')
+        fname = f'{outdir}/fragmentation_FIXED.png'
         fig.savefig(fname, dpi=150, bbox_inches='tight')
         plt.close(fig)
-        print(f"  Saved → {fname}")
+        print(f"\n  Saved → {fname}")
         return fname
     plt.show()
     return None
 
+
+if __name__ == '__main__':
+    print("Run fragmentation_figure_FIXED() with debug=True to see per-animal values")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. SEQUENCE PREDICTABILITY (TRANSITION MATRIX + ENTROPY)
