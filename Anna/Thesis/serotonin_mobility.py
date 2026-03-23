@@ -156,12 +156,14 @@ def plot_mobile_immobile(
     title='Avg Serotonin: Mobile vs Immobile',
     ylabel='Mean Z-score',
     output_path=None,
+    ctrl_color='#A8CCEA',  # light blue for saline
+    psi_color='#2E5090',   # dark blue for psilocybin
 ):
     """
     Publication-grade bar graph.
-    Saline     = light grey with diagonal hatching (//)
-    Psilocybin = dark grey solid
-    Dots       = white with black outline, paired lines in grey.
+    Saline     = light blue (ctrl_color)
+    Psilocybin = dark blue (psi_color)
+    Dots       = black with white outline, paired lines in grey.
     Significance bar per category (paired t-test).
 
     Parameters
@@ -169,6 +171,8 @@ def plot_mobile_immobile(
     psi_data    : output of collect_condition_data() for psilocybin animals
     ctrl_data   : output of collect_condition_data() for control animals
     output_path : if provided, saves figure here at 300 dpi
+    ctrl_color  : hex color for saline condition (default: #A8CCEA - light blue)
+    psi_color   : hex color for psilocybin condition (default: #2E5090 - dark blue)
     """
     from matplotlib.patches import Patch
     from scipy.stats import ttest_rel
@@ -178,9 +182,6 @@ def plot_mobile_immobile(
     x          = np.arange(len(categories))
     width      = 0.35
 
-    ctrl_color = '#BEBEBE'  # light grey — saline
-    psi_color  = '#606060'  # dark grey — psilocybin
-
     psi_means  = [np.nanmean(psi_data[c])  for c in categories]
     ctrl_means = [np.nanmean(ctrl_data[c]) for c in categories]
     psi_sems   = [sem(psi_data[c],  nan_policy='omit') for c in categories]
@@ -188,17 +189,17 @@ def plot_mobile_immobile(
 
     fig, ax = plt.subplots(figsize=(7, 6))
 
-    # Bars — saline (ctrl) left hatched, psi right solid
+    # Bars — saline (ctrl) left, psi right (with black borders)
     ax.bar(x - width / 2, ctrl_means, width, yerr=ctrl_sems,
-           color=ctrl_color, hatch='//', edgecolor='black', linewidth=0.8,
+           color=ctrl_color, edgecolor='black', linewidth=1.5,
            label='Saline', capsize=5,
-           error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
+           error_kw=dict(elinewidth=2.0, ecolor='black'), zorder=2)
     ax.bar(x + width / 2, psi_means, width, yerr=psi_sems,
-           color=psi_color, edgecolor='black', linewidth=0.8,
+           color=psi_color, edgecolor='black', linewidth=1.5,
            label='Psilocybin', capsize=5,
-           error_kw=dict(elinewidth=1.5, ecolor='black'), zorder=2)
+           error_kw=dict(elinewidth=2.0, ecolor='black'), zorder=2)
 
-    # Individual dots + paired connecting lines
+    # Individual dots + paired connecting lines (black with white outline)
     rng = np.random.default_rng(42)
     for i, cat in enumerate(categories):
         cv = ctrl_data[cat]
@@ -208,18 +209,18 @@ def plot_mobile_immobile(
         jp = rng.uniform(-0.04, 0.04, size=len(pv))
 
         ax.scatter(x[i] - width / 2 + jc, cv,
-                   color='white', edgecolors='black', s=55,
-                   linewidths=1.2, zorder=5)
+                   color='black', edgecolors='white', s=75,
+                   linewidths=2.0, zorder=5)
         ax.scatter(x[i] + width / 2 + jp, pv,
-                   color='white', edgecolors='black', s=55,
-                   linewidths=1.2, zorder=5)
+                   color='black', edgecolors='white', s=75,
+                   linewidths=2.0, zorder=5)
 
         n_pairs = min(len(cv), len(pv))
         for j in range(n_pairs):
             ax.plot(
                 [x[i] - width / 2 + jc[j], x[i] + width / 2 + jp[j]],
                 [cv[j], pv[j]],
-                color='gray', linewidth=0.8, alpha=0.5, zorder=3
+                color='gray', linewidth=0.8, alpha=0.4, zorder=3
             )
 
         # Significance bar
@@ -234,17 +235,18 @@ def plot_mobile_immobile(
 
     # Legend
     legend_elements = [
-        Patch(facecolor=ctrl_color, hatch='//', edgecolor='black', label='Saline'),
-        Patch(facecolor=psi_color, edgecolor='black', label='Psilocybin'),
+        Patch(facecolor=ctrl_color, edgecolor='black', linewidth=1.5, label='Saline'),
+        Patch(facecolor=psi_color, edgecolor='black', linewidth=1.5, label='Psilocybin'),
     ]
-    ax.legend(handles=legend_elements, fontsize=11, frameon=False)
+    ax.legend(handles=legend_elements, fontsize=12, frameon=False)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=13)
-    ax.set_ylabel(ylabel, fontsize=13)
-    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13)
+    ax.set_xticklabels(xlabels, fontsize=13, fontweight='bold')
+    ax.set_ylabel(ylabel, fontsize=13, fontweight='bold')
+    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13, fontweight='bold')
     ax.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.4)
     ax.spines[['top', 'right']].set_visible(False)
+    ax.spines[['left', 'bottom']].set_linewidth(1.2)
     ax.tick_params(axis='both', labelsize=11)
     ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] * 1.2)
     fig.tight_layout()
