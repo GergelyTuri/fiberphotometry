@@ -4,8 +4,11 @@ periplot_behavior_structure.py
 Behavioral structure metrics from BORIS bout data:
 
   1. bout_duration_figure()      — mean bout duration per behavior per condition
-  2. fragmentation_figure()      — number of bouts, bout rate, inter-bout interval
+  2. fragmentation_figure()      — bout count, mean duration, inter-bout interval
   3. sequence_predictability()   — transition matrix + entropy score
+
+Updated: Fragmentation figure now uses thesis-ready layout with three
+independent metrics (Count, Duration, IBI) shown in separate figures.
 
 Usage:
     from periplot_behavior_structure import (
@@ -21,7 +24,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from scipy.stats import sem as scipy_sem, mannwhitneyu
+from scipy.stats import sem as scipy_sem, mannwhitneyu, ttest_ind
 from collections import Counter
 import itertools
 
@@ -36,12 +39,14 @@ BEHAVIOR_LABELS = {
     'g': 'Grooming',
     'd': 'Digging',
     'r': 'Rearing',
+    'eat': 'Eating',
 }
 BEHAVIOR_COLORS = {
     'e': '#4CAF93',
     'g': '#9B59B6',
     'd': '#E67E22',
     'r': '#E74C3C',
+    'eat': '#F39C12',
 }
 
 def _cond_color(c):
@@ -132,7 +137,7 @@ def bout_duration_figure(animal_datasets, outdir='.', save=True, test='mwu'):
 
     if save:
         fname = os.path.join(outdir, 'bout_duration.png')
-        fig.savefig(fname, dpi=150, bbox_inches='tight')
+        fig.savefig(fname, dpi=300, bbox_inches='tight')
         plt.close(fig)
         print(f"  Saved → {fname}")
         return fname
@@ -140,37 +145,53 @@ def bout_duration_figure(animal_datasets, outdir='.', save=True, test='mwu'):
     return None
 
 
-
-
 # ─────────────────────────────────────────────────────────────────────────────
-# FIXED FRAGMENTATION FUNCTION
+# 2. FRAGMENTATION FIGURE — THESIS LAYOUT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def fragmentation_figure_FIXED(animal_datasets, session_duration_s=1800.0,
-                                outdir='.', save=True, test='mwu', debug=False):
+def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
+                         outdir='.', save=True, test='mwu'):
     """
-    THREE FRAGMENTATION METRICS (now correctly separated):
-      - Bout count: number of bouts
-      - Bout rate: bouts per minute (= count / session_minutes)
-      - Mean IBI: inter-bout interval in seconds (= mean time between onsets)
+    Three fragmentation metrics shown in thesis-ready layout:
+      - Bout count: number of bouts per behavior
+      - Mean duration: average duration per bout
+      - Mean IBI: inter-bout interval (time between consecutive onsets)
 
-    KEY FIX: Each metric now computes and stores its own per_animal list,
-    preventing cross-contamination between columns.
+    Figure layout:
+      Three separate figures, one per metric.
+      Each figure shows all behaviors side-by-side with paired bars (condition 1 vs condition 2).
+      
+    This layout is publication-ready and independent of behavior count.
+    
+    Parameters
+    ----------
+    animal_datasets : list of dict
+        Each dict: {'animal_id', 'condition', 'bouts'}
+    session_duration_s : float
+        Length of recording session (default 1800s = 30 min)
+    outdir : str
+        Output directory for saving figures
+    save : bool
+        Whether to save figures
+    test : str
+        Statistical test: 'mwu' (Mann-Whitney U) or 't' (t-test)
     """
-    import os
     os.makedirs(outdir, exist_ok=True)
 
     behaviors  = sorted({b for d in animal_datasets for b in d['bouts']})
     conditions = list(dict.fromkeys(d['condition'] for d in animal_datasets))
+    
+    if len(conditions) != 2:
+        print(f"⚠ Warning: Expected 2 conditions, found {len(conditions)}")
 
-    # ── DEFINE METRICS (clearer naming) ──────────────────────────────────────
+    # ── DEFINE METRICS ───────────────────────────────────────────────────────
     def metric_count(durs, onsets, offsets):
         """Total number of bouts"""
         return len(durs)
 
-    def metric_rate(durs, onsets, offsets):
-        """Bouts per minute"""
-        return len(durs) / (session_duration_s / 60.0)
+    def metric_duration(durs, onsets, offsets):
+        """Mean duration per bout"""
+        return np.mean(durs) if len(durs) > 0 else 0
 
     def metric_ibi(durs, onsets, offsets):
         """Mean inter-bout interval (time between consecutive onsets)"""
@@ -179,121 +200,160 @@ def fragmentation_figure_FIXED(animal_datasets, session_duration_s=1800.0,
         return np.nan
 
     metrics = [
-        ('count',    'Bout count',          metric_count),
-        ('rate',     'Bout rate (per min)', metric_rate),
-        ('ibi',      'Mean IBI (s)',        metric_ibi),
+        ('count',    'Bout Count',                metric_count),
+        ('duration', 'Mean Bout Duration (s)',    metric_duration),
+        ('ibi',      'Mean Inter-Bout Interval (s)', metric_ibi),
     ]
 
-    # ── COMPUTE PER-ANIMAL VALUES FOR EACH METRIC ────────────────────────────
-    # KEY: Separate per_animal list for each metric
-    metric_data = {metric_key: {} for metric_key, _, _ in metrics}
-
-    for beh in behaviors:
-        for metric_key, metric_label, metric_fn in metrics:
+    # ── COMPUTE PER-ANIMAL VALUES FOR EACH METRIC/BEHAVIOR ────────────────────
+    metric_data = {}
+    
+    for metric_key, metric_label, metric_fn in metrics:
+        metric_data[metric_key] = {}
+        
+        for beh in behaviors:
             metric_data[metric_key][beh] = {}
-
+            
             for cond in conditions:
                 cond_animals = [d for d in animal_datasets
                                 if d['condition'] == cond]
                 
-                # ← FIX: Fresh per_animal list for each metric
                 per_animal = []
-                
-                for animal_idx, d in enumerate(cond_animals):
+                for d in cond_animals:
                     bouts = d['bouts'].get(beh, np.empty((0, 2)))
                     
                     if len(bouts) == 0:
-                        # Handle empty case
                         val = 0 if metric_key != 'ibi' else np.nan
                         per_animal.append(val)
-                        if debug:
-                            print(f"  {d['animal_id']} | {cond} | {beh} | {metric_key}: NO DATA → {val}")
                         continue
 
-                    # Extract bout components
                     durs    = bouts[:, 1] - bouts[:, 0]
                     onsets  = bouts[:, 0]
                     offsets = bouts[:, 1]
 
-                    # Compute metric
                     val = metric_fn(durs, onsets, offsets)
                     per_animal.append(val)
 
-                    if debug:
-                        print(f"  {d['animal_id']} | {cond} | {beh} | {metric_key}: {val:.4f}")
-
-                # Store values (filtering NaN for IBI)
+                # Store values (filter NaN for IBI)
                 vals = np.array(per_animal, dtype=float)
                 vals = vals[~np.isnan(vals)]
                 metric_data[metric_key][beh][cond] = vals
 
-    # ── CREATE FIGURE ────────────────────────────────────────────────────────
-    fig, axes = plt.subplots(len(behaviors), 3,
-                              figsize=(13, 4 * len(behaviors)),
-                              gridspec_kw={'hspace': 0.55, 'wspace': 0.40})
-    if len(behaviors) == 1:
-        axes = axes[np.newaxis, :]
+    # ── CREATE FIGURES (ONE PER METRIC) ──────────────────────────────────────
+    for metric_key, metric_label, metric_fn in metrics:
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.spines[['top', 'right']].set_visible(False)
 
-    fig.suptitle('Behavioral Fragmentation by Condition',
-                 fontsize=13, fontweight='bold')
+        # X-axis positioning: behaviors with paired bars
+        n_behs = len(behaviors)
+        x_positions = []
+        x_labels = []
+        bar_width = 0.35
+        group_spacing = 1.2  # Space between behavior groups
 
-    for row, beh in enumerate(behaviors):
-        beh_name = BEHAVIOR_LABELS.get(beh, beh)
-        beh_col  = BEHAVIOR_COLORS.get(beh, '#555')
+        x_offset = 0
+        for beh_idx, beh in enumerate(behaviors):
+            beh_name = BEHAVIOR_LABELS.get(beh, beh)
+            
+            # Position for first condition
+            x_cond1 = x_offset
+            # Position for second condition
+            x_cond2 = x_offset + bar_width + 0.05
+            
+            x_positions.append((beh, conditions[0], x_cond1))
+            x_positions.append((beh, conditions[1], x_cond2))
+            
+            # Label at center of pair
+            x_center = (x_cond1 + x_cond2) / 2
+            x_labels.append((x_center, beh_name))
+            
+            x_offset += group_spacing
 
-        for col, (metric_key, metric_label, metric_fn) in enumerate(metrics):
-            ax = axes[row, col]
-            ax.spines[['top', 'right']].set_visible(False)
+        # ── Plot bars for each behavior × condition ──────────────────────────
+        cond_vals_all = {cond: {} for cond in conditions}
+        
+        for beh, cond, x_pos in x_positions:
+            vals = metric_data[metric_key][beh].get(cond, np.array([]))
+            cond_vals_all[cond][beh] = vals
+            
+            if len(vals) == 0:
+                continue
 
-            cond_vals = {}
-            for xi, cond in enumerate(conditions):
-                vals = metric_data[metric_key][beh].get(cond, np.array([]))
-                cond_vals[cond] = vals
+            color = _cond_color(cond)
+            bar_mean = np.mean(vals)
+            bar_err = scipy_sem(vals) if len(vals) > 1 else 0
 
-                color = _cond_color(cond)
-                if len(vals) == 0:
-                    continue
+            # Bar
+            ax.bar(x_pos, bar_mean, yerr=bar_err, color=color, alpha=0.70,
+                   width=bar_width, capsize=5, error_kw={'lw': 2, 'capthick': 2},
+                   zorder=2)
 
-                # Plot bar + strip
-                ax.bar(xi, np.mean(vals),
-                       yerr=scipy_sem(vals) if len(vals) > 1 else 0,
-                       color=color, alpha=0.7, width=0.55, capsize=5,
-                       error_kw={'lw': 2}, zorder=2)
-                jitter = np.random.default_rng(42).uniform(-0.1, 0.1, len(vals))
-                ax.scatter(xi + jitter, vals, color=color, s=45, alpha=0.85,
-                           edgecolors='white', linewidths=0.5, zorder=3)
+            # Individual points (jitter)
+            jitter = np.random.default_rng(42).uniform(-0.08, 0.08, len(vals))
+            ax.scatter(x_pos + jitter, vals, color=color, s=50, alpha=0.75,
+                       edgecolors='white', linewidths=0.5, zorder=3)
 
-            # Stats
-            if test and len(conditions) >= 2:
-                g1 = cond_vals.get(conditions[0], np.array([]))
-                g2 = cond_vals.get(conditions[1], np.array([]))
+        # ── Add statistics (comparisons within each behavior) ────────────────
+        if test and len(conditions) == 2:
+            for beh_idx, beh in enumerate(behaviors):
+                beh_name = BEHAVIOR_LABELS.get(beh, beh)
+                
+                g1 = cond_vals_all[conditions[0]].get(beh, np.array([]))
+                g2 = cond_vals_all[conditions[1]].get(beh, np.array([]))
+                
                 if len(g1) > 1 and len(g2) > 1:
-                    _, pval = mannwhitneyu(g1, g2, alternative='two-sided')
-                    y_br = ax.get_ylim()[1] * 1.08
-                    ax.plot([0, 1], [y_br, y_br], color='black', lw=1.0)
-                    ax.text(0.5, y_br * 1.01,
-                            _p_stars(pval) + f'\np={pval:.3f}',
-                            ha='center', va='bottom', fontsize=7)
+                    if test == 'mwu':
+                        _, pval = mannwhitneyu(g1, g2, alternative='two-sided')
+                    else:
+                        _, pval = ttest_ind(g1, g2)
+                    
+                    # Draw line above the two bars
+                    x_cond1 = beh_idx * group_spacing
+                    x_cond2 = x_cond1 + bar_width + 0.05
+                    x_line_center = (x_cond1 + x_cond2) / 2
+                    
+                    y_max = max(np.max(g1), np.max(g2))
+                    y_line = y_max * 1.10
+                    
+                    ax.plot([x_cond1, x_cond2], [y_line, y_line], color='black', lw=1.0)
+                    ax.text(x_line_center, y_line * 1.02, _p_stars(pval),
+                            ha='center', va='bottom', fontsize=9, fontweight='bold')
 
-            ax.set_xticks(range(len(conditions)))
-            ax.set_xticklabels(conditions, fontsize=9)
-            ax.set_ylabel(metric_label, fontsize=9)
-            if col == 0:
-                ax.set_title(f'{beh_name}', fontsize=11,
-                             fontweight='bold', color=beh_col)
+        # ── Format axes ──────────────────────────────────────────────────────
+        x_tick_positions = [label[0] for label in x_labels]
+        x_tick_labels = [label[1] for label in x_labels]
+        
+        ax.set_xticks(x_tick_positions)
+        ax.set_xticklabels(x_tick_labels, fontsize=11)
+        ax.set_ylabel(metric_label, fontsize=12, fontweight='bold')
+        ax.set_title(f'Behavioral Fragmentation: {metric_label}',
+                     fontsize=13, fontweight='bold', pad=15)
 
-    if save:
-        fname = f'{outdir}/fragmentation_FIXED.png'
-        fig.savefig(fname, dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        print(f"\n  Saved → {fname}")
-        return fname
-    plt.show()
-    return None
+        # Add legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor=_cond_color(conditions[0]), alpha=0.70, 
+                  label=conditions[0].capitalize()),
+            Patch(facecolor=_cond_color(conditions[1]), alpha=0.70,
+                  label=conditions[1].capitalize()),
+        ]
+        ax.legend(handles=legend_elements, fontsize=11, frameon=False, loc='upper left')
 
+        # Grid for readability
+        ax.yaxis.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        ax.set_axisbelow(True)
 
-if __name__ == '__main__':
-    print("Run fragmentation_figure_FIXED() with debug=True to see per-animal values")
+        # Save
+        if save:
+            fname = os.path.join(outdir, f'fragmentation_{metric_key}.png')
+            fig.savefig(fname, dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            print(f"  Saved → {fname}")
+        else:
+            plt.show()
+
+    print(f"✓ Created 3 figures: count, duration, IBI (thesis-ready layout)")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. SEQUENCE PREDICTABILITY (TRANSITION MATRIX + ENTROPY)
@@ -441,7 +501,7 @@ def sequence_predictability(animal_datasets, outdir='.', save=True, test='mwu'):
 
     if save:
         fname = os.path.join(outdir, 'sequence_predictability.png')
-        fig.savefig(fname, dpi=150, bbox_inches='tight')
+        fig.savefig(fname, dpi=300, bbox_inches='tight')
         plt.close(fig)
         print(f"  Saved → {fname}")
         return fname
