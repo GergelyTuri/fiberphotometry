@@ -421,4 +421,30 @@ def plot_bdnf_2x2_pub(df):
                frameon=True, fontsize=9, title_fontsize=9)
 
     plt.savefig("bdnf_figure.png", dpi=150, bbox_inches="tight")
+    # ─── PRINT P-VALUES ───────────────────────────────────────────────────────
+    print("\n" + "="*70)
+    print("BDNF STATISTICAL RESULTS")
+    print("="*70)
+    
+    for i, area in enumerate(areas):
+        for j, tp in enumerate(timepoints):
+            plot_df = df[(df["area"] == area) & (df["group"].isin([tp, "ctrl"]))].copy()
+            plot_df["plot_group"] = plot_df["group"].map(lambda x: "Vehicle" if x == "ctrl" else "PSI")
+            
+            veh_data = plot_df[plot_df["plot_group"] == "Vehicle"]["mean/volume"].values
+            psi_data = plot_df[plot_df["plot_group"] == "PSI"]["mean/volume"].values
+            
+            if len(veh_data) > 0 and len(psi_data) > 0:
+                t_stat, p_val = stats.ttest_ind(veh_data, psi_data)
+                
+                area_name = row_labels[i]
+                time_name = col_titles[j]
+                
+                print(f"\n{area_name} — {time_name}")
+                print(f"  Vehicle:  {np.mean(veh_data):.3f} ± {np.std(veh_data)/np.sqrt(len(veh_data)):.3f}  (n={len(veh_data)})")
+                print(f"  PSI:      {np.mean(psi_data):.3f} ± {np.std(psi_data)/np.sqrt(len(psi_data)):.3f}  (n={len(psi_data)})")
+                print(f"  t-test:   t = {t_stat:.3f}, p = {p_val:.4f}")
+    
+    print("\n" + "="*70)
+
     plt.show()
