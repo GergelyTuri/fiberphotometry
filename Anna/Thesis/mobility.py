@@ -11,12 +11,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import sem, wilcoxon, ttest_rel
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # CORE — compute mobile/immobile fraction for one CSV
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def compute_mobility_fractions(
     velocity_path:      str,
     mobility_threshold: float = 5.0,
@@ -29,26 +29,26 @@ def compute_mobility_fractions(
         'mobile':   is_mobile.sum()    / len(is_mobile),
         'immobile': (~is_mobile).sum() / len(is_mobile),
     }
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # COLLECT — run across all animals in a condition
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def collect_mobility_data(
     animal_list:        list[dict],
     mobility_threshold: float = 5.0,
 ) -> dict[str, list[float]]:
     """
     Collect mobility fractions for all animals in one condition.
-
+ 
     Parameters
     ----------
     animal_list : list of dicts with keys:
                     'recording_path' — velocity CSV for the recording
                     'baseline_path'  — velocity CSV for the baseline
     mobility_threshold : velocity threshold in cm/s
-
+ 
     Returns
     -------
     {
@@ -60,7 +60,7 @@ def collect_mobility_data(
     """
     collected = {'mobile': [], 'immobile': [],
                  'mobile_change': [], 'immobile_change': []}
-
+ 
     for animal in animal_list:
         print(animal['recording_path'].split('/')[-1])
         rec  = compute_mobility_fractions(animal['recording_path'], mobility_threshold)
@@ -69,33 +69,33 @@ def collect_mobility_data(
         collected['immobile'].append(rec['immobile'])
         collected['mobile_change'].append(rec['mobile']    - base['mobile'])
         collected['immobile_change'].append(rec['immobile'] - base['immobile'])
-
+ 
     return collected
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATS HELPER
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def _pval_to_stars(p: float) -> str:
     if p < 0.001: return '***'
     if p < 0.01:  return '**'
     if p < 0.05:  return '*'
     return 'ns'
-
-
+ 
+ 
 def _add_significance_bar(ax, x1, x2, y, p_val, fontsize=11):
     """Draw a significance bracket between two x positions."""
     h = y * 0.03
     ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color='black', linewidth=1.5)
     ax.text((x1 + x2) / 2, y + h * 1.2, _pval_to_stars(p_val),
             ha='center', va='bottom', fontsize=fontsize, fontweight='bold')
-
-
+ 
+ 
 # ─────────────────────────────────────────────────────────────────────────────
 # PLOT — absolute mobility only (publication grade)
 # ─────────────────────────────────────────────────────────────────────────────
-
+ 
 def plot_mobility(
     psi_data:           dict[str, list[float]],
     ctrl_data:          dict[str, list[float]],
@@ -111,7 +111,7 @@ def plot_mobility(
     Paired dots connected by lines. Significance bar.
     
     Professional contrasting blue palette with black/white contrast dots.
-
+ 
     Parameters
     ----------
     psi_data    : output of collect_mobility_data() for psi animals
@@ -120,9 +120,9 @@ def plot_mobility(
     ctrl_color  : hex color for saline condition (default: #A8CCEA - light blue)
     psi_color   : hex color for psilocybin condition (default: #2E5090 - dark blue)
     """
-
+ 
     fig, ax = plt.subplots(figsize=(6, 6))
-
+ 
     # Get mobile data only
     cv = ctrl_data['mobile']
     pv = psi_data['mobile']
@@ -131,7 +131,42 @@ def plot_mobility(
     psi_mean = np.nanmean(pv)
     ctrl_sem = sem(cv, nan_policy='omit')
     psi_sem = sem(pv, nan_policy='omit')
-
+    
+    # ═════════════════════════════════════════════════════════════════════════
+    # STATISTICAL TESTS & PRINT P-VALUES
+    # ═════════════════════════════════════════════════════════════════════════
+    print("\n" + "="*70)
+    print("STATISTICAL ANALYSIS: MOBILITY FRACTION (Mobile)")
+    print("="*70)
+    
+    n = min(len(cv), len(pv))
+    print(f"\nSample size: {n} paired animals")
+    print(f"Ctrl (Saline) Mean ± SEM: {ctrl_mean:.4f} ± {ctrl_sem:.4f}")
+    print(f"PSI (Psilocybin) Mean ± SEM: {psi_mean:.4f} ± {psi_sem:.4f}")
+    print(f"Mean difference: {psi_mean - ctrl_mean:.4f}")
+    
+    # Paired t-test
+    if n >= 3:
+        t_stat, p_ttest = ttest_rel(cv[:n], pv[:n])
+        print(f"\nPaired t-test:")
+        print(f"  t-statistic: {t_stat:.4f}")
+        print(f"  p-value: {p_ttest:.6f} {_pval_to_stars(p_ttest)}")
+    else:
+        p_ttest = 1.0
+        print(f"\nPaired t-test: N/A (n < 3)")
+    
+    # Wilcoxon signed-rank test (non-parametric alternative)
+    if n >= 3:
+        w_stat, p_wilcox = wilcoxon(cv[:n], pv[:n])
+        print(f"\nWilcoxon signed-rank test (non-parametric):")
+        print(f"  W-statistic: {w_stat:.4f}")
+        print(f"  p-value: {p_wilcox:.6f} {_pval_to_stars(p_wilcox)}")
+    else:
+        p_wilcox = 1.0
+        print(f"\nWilcoxon test: N/A (n < 3)")
+    
+    print("="*70 + "\n")
+ 
     # Bars — ctrl on left, psi on right (with black borders)
     x = np.array([0, 0.3])
     width = 0.35
@@ -142,19 +177,19 @@ def plot_mobility(
     ax.bar(x[1] + width / 2, psi_mean, width, yerr=psi_sem,
            color=psi_color, edgecolor='black', linewidth=1.5, capsize=5, zorder=2,
            error_kw=dict(elinewidth=2.0, ecolor='black'))
-
+ 
     # Paired dots + connecting lines (black fill with white outline to pop)
     rng = np.random.default_rng(42)
     jc = rng.uniform(-0.04, 0.04, size=len(cv))
     jp = rng.uniform(-0.04, 0.04, size=len(pv))
-
+ 
     ax.scatter(x[0] - width / 2 + jc, cv,
                color='black', edgecolors='white', s=75, zorder=5,
                linewidths=2.0)
     ax.scatter(x[1] + width / 2 + jp, pv,
                color='black', edgecolors='white', s=75, zorder=5,
                linewidths=2.0)
-
+ 
     # Connect paired animals
     for j in range(min(len(cv), len(pv))):
         ax.plot(
@@ -162,20 +197,20 @@ def plot_mobility(
             [cv[j], pv[j]],
             color='gray', linewidth=0.8, alpha=0.4, zorder=3
         )
-
+ 
     # Significance bar (paired t-test)
     n = min(len(cv), len(pv))
     if n >= 3:
         _, p = ttest_rel(cv[:n], pv[:n])
     else:
         p = 1.0
-
+ 
     y_top = max(ctrl_mean, psi_mean) * 1.08
     _add_significance_bar(ax,
                           x[0] - width / 2,
                           x[1] + width / 2,
                           y_top, p)
-
+ 
     # Legend patches
     from matplotlib.patches import Patch
     legend_elements = [
@@ -183,7 +218,7 @@ def plot_mobility(
         Patch(facecolor=psi_color, edgecolor='black', linewidth=1.5, label='Psilocybin'),
     ]
     ax.legend(handles=legend_elements, fontsize=12, frameon=False, loc='upper right')
-
+ 
     # Clean axes
     ax.set_xticks(x)
     ax.set_xticklabels(['Saline', 'Psilocybin'], fontsize=13, fontweight='bold')
@@ -194,11 +229,9 @@ def plot_mobility(
     ax.spines[['left', 'bottom']].set_linewidth(1.2)
     ax.tick_params(axis='both', labelsize=11)
     fig.tight_layout()
-
+ 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches='tight')
         print(f'Saved → {output_path}')
-
+ 
     return fig
-
-
