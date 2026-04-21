@@ -293,8 +293,8 @@ def plot_bdnf_by_sex(df):
 
 def plot_bdnf_2x2_pub(df):
     """
-    2x2 publication-quality figure of BDNF per area and timepoint.
-    Day 1 and Day 7 on same axis with paired Vehicle vs Psi bars.
+    Two separate figures (one per region: DG and CA3).
+    Each figure shows Day 1 and Day 7 on SAME AXIS with paired Vehicle vs Psi bars.
     Styling: black + professional blue filled bars, white dots with black edges.
     """
 
@@ -305,52 +305,59 @@ def plot_bdnf_2x2_pub(df):
 
     areas = ["hilus", "ca3"]
     timepoints = ["pcb1", "pcb7"]
-    col_titles = ["Day 1", "Day 7"]
-    row_labels = ["DG", "CA3"]
+    area_labels = {"hilus": "DG", "ca3": "CA3"}
 
     # Professional poster colors - BLACK + PROFESSIONAL BLUE
     bar_colors = {"Vehicle": "#000000", "PSI": "#1F77B4"}
     sex_facecolors = {"M": "white", "F": "white"}
     sex_edgecolors = {"M": "black", "F": "#E0409A"}
 
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7))
-    plt.subplots_adjust(hspace=0.4, wspace=0.25, right=0.78, top=0.88)
-
-    fig.suptitle("Psilocybin Does Not Alter BDNF Protein Expression", fontsize=13, fontweight="bold", y=0.97)
-
-    for i, area in enumerate(areas):
-        for j, tp in enumerate(timepoints):
-            ax = axes[i, j]
-
+    # Create one figure per region
+    for area in areas:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        area_label = area_labels[area]
+        fig.suptitle(f"{area_label} — BDNF Protein Expression", fontsize=14, fontweight="bold", y=0.98)
+        
+        # X-axis positions: Day 1 and Day 7, with Veh and PSI bars close together
+        x_day1 = np.array([0, 0.15])         # Day 1: Veh at 0, PSI at 0.15
+        x_day7 = np.array([0.5, 0.65])       # Day 7: Veh at 0.5, PSI at 0.65
+        bar_width = 0.12
+        
+        # Find global y_max for consistent scaling
+        area_data = df[df["area"] == area]
+        y_max = area_data["mean/volume"].max() * 1.35
+        
+        # Plot each timepoint
+        for tp_idx, (tp, x_pos) in enumerate([(tp, [x_day1, x_day7][i]) for i, tp in enumerate(timepoints)]):
             plot_df = df[(df["area"] == area) & (df["group"].isin([tp, "ctrl"]))].copy()
             plot_df["plot_group"] = plot_df["group"].map(lambda x: "Vehicle" if x == "ctrl" else "PSI")
-
-            group_order = ["Vehicle", "PSI"]
             
-            # X positions: bars MUCH closer together
-            x_positions = {"Vehicle": 0, "PSI": 0.15}
-            bar_width = 0.12
-
+            group_order = ["Vehicle", "PSI"]
             summary = plot_df.groupby("plot_group")["mean/volume"].agg(["mean", "sem"]).reindex(group_order).reset_index()
-
-            # Bars - FILLED with black outlines, bars very close
-            for _, row in summary.iterrows():
-                ax.bar(
-                    x_positions[row["plot_group"]],
-                    row["mean"],
-                    bar_width,
-                    yerr=row["sem"],
-                    color=bar_colors[row["plot_group"]],
-                    edgecolor="black",
-                    linewidth=2.5,
-                    capsize=5,
-                    error_kw={"elinewidth": 1.5, "capthick": 2}
-                )
-
-            # Individual data points - white with black edges
-            jitter_strength = 0.03
+            
+            # Bars - FILLED with black outlines
+            for cond_idx, cond in enumerate(group_order):
+                cond_summary = summary[summary["plot_group"] == cond]
+                if len(cond_summary) > 0:
+                    ax.bar(
+                        x_pos[cond_idx],
+                        cond_summary["mean"].values[0],
+                        bar_width,
+                        yerr=cond_summary["sem"].values[0],
+                        color=bar_colors[cond],
+                        edgecolor="black",
+                        linewidth=2.5,
+                        capsize=5,
+                        error_kw={"elinewidth": 1.5, "capthick": 2},
+                        zorder=2
+                    )
+            
+            # Individual data points - white with black/pink edges
+            jitter_strength = 0.02
             for _, row in plot_df.iterrows():
-                xpos = x_positions[row["plot_group"]] + np.random.uniform(-jitter_strength, jitter_strength)
+                cond_idx = 0 if row["plot_group"] == "Vehicle" else 1
+                xpos = x_pos[cond_idx] + np.random.uniform(-jitter_strength, jitter_strength)
                 ax.scatter(
                     xpos,
                     row["mean/volume"],
@@ -360,70 +367,59 @@ def plot_bdnf_2x2_pub(df):
                     s=70,
                     zorder=5
                 )
-
-            # Significance bracket
-            bar_top = (summary["mean"] + summary["sem"]).max()
-            tick_height = bar_top * 0.04
-            bracket_y = bar_top * 1.12
-
-            ax.plot([x_positions["Vehicle"], x_positions["Vehicle"], x_positions["PSI"], x_positions["PSI"]], 
+            
+            # Significance bracket for this timepoint
+            bar_top = summary["mean"].max() + summary["sem"].max()
+            tick_height = y_max * 0.04
+            bracket_y = bar_top + y_max * 0.05
+            
+            ax.plot([x_pos[0], x_pos[0], x_pos[1], x_pos[1]], 
                    [bracket_y, bracket_y + tick_height, bracket_y + tick_height, bracket_y], 
-                   color="black", lw=1.2)
-            ax.text((x_positions["Vehicle"] + x_positions["PSI"]) / 2, bracket_y + tick_height + bar_top * 0.02, 
-                   "ns", ha="center", va="bottom", fontsize=9, fontweight="bold")
-
-            # Axes formatting
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            ax.spines["left"].set_linewidth(0.8)
-            ax.spines["bottom"].set_linewidth(0.8)
-            ax.set_xticks([x_positions["Vehicle"], x_positions["PSI"]])
-            ax.set_xticklabels(["Veh", "1 mg/kg\nPSI"], fontsize=10, fontweight="bold")
-            ax.tick_params(axis="y", labelsize=10, length=3, width=0.8)
-            ax.tick_params(axis="x", length=0)
-            ax.set_xlim(-0.15, 0.35)
-            ax.grid(False)
-
-            if i == 0:
-                ax.set_title(col_titles[j], fontsize=11, fontweight="bold", pad=10)
-
-            if j == 0:
-                ax.set_ylabel("Mean BDNF Protein Intensity", fontsize=10, fontweight="bold")
-            else:
-                ax.set_yticklabels([])
-
-    # Row labels
-    for i, label in enumerate(row_labels):
-        fig.text(
-            0.01,
-            axes[i, 0].get_position().y0 + axes[i, 0].get_position().height / 2,
-            label,
-            va="center", ha="left",
-            fontsize=11, fontweight="bold",
-            rotation=90
-        )
-
-    # Legend
-    legend_elements = [
-        mpatches.Patch(facecolor=bar_colors["Vehicle"], edgecolor="black", linewidth=2.5, label="Veh"),
-        mpatches.Patch(facecolor=bar_colors["PSI"], edgecolor="black", linewidth=2.5, label="1 mg/kg PSI"),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
-                   markeredgecolor='black', markeredgewidth=1.5, markersize=7, label='Male'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
-                   markeredgecolor='#E0409A', markeredgewidth=1.5, markersize=7, label='Female'),
-    ]
-    fig.legend(handles=legend_elements, loc="upper right", bbox_to_anchor=(0.99, 0.88),
-               frameon=True, fontsize=9)
-
-    plt.savefig("bdnf_figure.png", dpi=150, bbox_inches="tight")
+                   color="black", lw=1.2, zorder=6)
+            ax.text((x_pos[0] + x_pos[1]) / 2, bracket_y + tick_height + y_max * 0.02, 
+                   "ns", ha="center", va="bottom", fontsize=10, fontweight="bold", zorder=7)
+        
+        # Axes formatting
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(0.8)
+        ax.spines["bottom"].set_linewidth(0.8)
+        ax.set_xticks([0.075, 0.575])  # Midpoint of each timepoint pair
+        ax.set_xticklabels(["Day 1", "Day 7"], fontsize=12, fontweight="600")
+        ax.set_ylabel("Mean BDNF Protein Intensity", fontsize=13, fontweight="600")
+        ax.tick_params(axis="y", labelsize=11, length=3, width=0.8)
+        ax.tick_params(axis="x", labelsize=11, length=0)
+        ax.set_ylim(0, y_max)
+        ax.grid(False)
+        
+        # Legend
+        legend_elements = [
+            mpatches.Patch(facecolor=bar_colors["Vehicle"], edgecolor="black", linewidth=2.5, label="Veh"),
+            mpatches.Patch(facecolor=bar_colors["PSI"], edgecolor="black", linewidth=2.5, label="1 mg/kg PSI"),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
+                       markeredgecolor='black', markeredgewidth=1.5, markersize=8, label='Male'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
+                       markeredgecolor='#E0409A', markeredgewidth=1.5, markersize=8, label='Female'),
+        ]
+        ax.legend(handles=legend_elements, loc="upper right", fontsize=11, frameon=True, framealpha=0.95, edgecolor="black")
+        
+        plt.tight_layout()
+        
+        # Save
+        filename = f"bdnf_protein_{area}.png"
+        plt.savefig(filename, dpi=300, bbox_inches="tight", facecolor="white")
+        print(f"Saved: {filename}")
+        plt.show()
     
     # ─── PRINT P-VALUES ───────────────────────────────────────────────────────
     print("\n" + "="*70)
     print("BDNF STATISTICAL RESULTS")
     print("="*70)
     
-    for i, area in enumerate(areas):
-        for j, tp in enumerate(timepoints):
+    for area in areas:
+        area_label = area_labels[area]
+        print(f"\n{area_label}:")
+        for tp in timepoints:
             plot_df = df[(df["area"] == area) & (df["group"].isin([tp, "ctrl"]))].copy()
             plot_df["plot_group"] = plot_df["group"].map(lambda x: "Vehicle" if x == "ctrl" else "PSI")
             
@@ -432,15 +428,11 @@ def plot_bdnf_2x2_pub(df):
             
             if len(veh_data) > 0 and len(psi_data) > 0:
                 t_stat, p_val = stats.ttest_ind(veh_data, psi_data)
+                tp_label = "Day 1" if tp == "pcb1" else "Day 7"
                 
-                area_name = row_labels[i]
-                time_name = col_titles[j]
-                
-                print(f"\n{area_name} — {time_name}")
-                print(f"  Vehicle:  {np.mean(veh_data):.3f} ± {np.std(veh_data)/np.sqrt(len(veh_data)):.3f}  (n={len(veh_data)})")
-                print(f"  PSI:      {np.mean(psi_data):.3f} ± {np.std(psi_data)/np.sqrt(len(psi_data)):.3f}  (n={len(psi_data)})")
-                print(f"  t-test:   t = {t_stat:.3f}, p = {p_val:.4f}")
+                print(f"  {tp_label}:")
+                print(f"    Vehicle:  {np.mean(veh_data):.4f} ± {np.std(veh_data)/np.sqrt(len(veh_data)):.4f}  (n={len(veh_data)})")
+                print(f"    PSI:      {np.mean(psi_data):.4f} ± {np.std(psi_data)/np.sqrt(len(psi_data)):.4f}  (n={len(psi_data)})")
+                print(f"    p-value:  {p_val:.4f}")
     
     print("\n" + "="*70)
-
-    plt.show()
