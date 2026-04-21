@@ -164,7 +164,8 @@ def plot_bdnf_by_sex(df):
     col_titles = ["Post-Drug Day 1", "Post-Drug Day 7"]
     row_labels = ["DG", "CA3"]
 
-    bar_colors = {"Vehicle": "#D4B896", "PSI": "#CC5533"}
+    # Professional poster colors - DARK GREY + PROFESSIONAL BLUE
+    bar_colors = {"Vehicle": "#4A4A4A", "PSI": "#1F77B4"}
 
     sex_configs = {
         "M": {"label": "Male",   "dot_color": "black",   "filename": "bdnf_male.png"},
@@ -275,8 +276,8 @@ def plot_bdnf_by_sex(df):
 
         # Legend
         legend_elements = [
-            mpatches.Patch(facecolor="#D4B896", edgecolor="black", label="Veh"),
-            mpatches.Patch(facecolor="#CC5533", edgecolor="black", label="1 mg/kg PSI"),
+            mpatches.Patch(facecolor=bar_colors["Vehicle"], edgecolor="black", label="Veh"),
+            mpatches.Patch(facecolor=bar_colors["PSI"], edgecolor="black", label="1 mg/kg PSI"),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
                        markeredgecolor=sex_cfg["dot_color"], markeredgewidth=1.5,
                        markersize=7, label=sex_cfg["label"]),
@@ -295,7 +296,7 @@ def plot_bdnf_2x2_pub(df):
     """
     Two separate figures (one per region: DG and CA3).
     Each figure shows Day 1 and Day 7 on SAME AXIS with paired Vehicle vs Psi bars.
-    Styling: black + professional blue filled bars, white dots with black edges.
+    Styling: dark grey + professional blue filled bars, white dots with black edges.
     """
 
     # Clean data
@@ -307,8 +308,8 @@ def plot_bdnf_2x2_pub(df):
     timepoints = ["pcb1", "pcb7"]
     area_labels = {"hilus": "DG", "ca3": "CA3"}
 
-    # Professional poster colors - BLACK + PROFESSIONAL BLUE
-    bar_colors = {"Vehicle": "#000000", "PSI": "#1F77B4"}
+    # Professional poster colors - DARK GREY + PROFESSIONAL BLUE
+    bar_colors = {"Vehicle": "#4A4A4A", "PSI": "#1F77B4"}
     sex_facecolors = {"M": "white", "F": "white"}
     sex_edgecolors = {"M": "black", "F": "#E0409A"}
 
