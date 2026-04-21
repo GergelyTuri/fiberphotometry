@@ -3,7 +3,7 @@ mobility_plot_poster.py
 ───────────────────────
 Publication-grade bar plot of mobile fraction for psi vs ctrl conditions.
 
-Styling: FILLED bars (black + professional blue), bars much closer together, matching grooming behavior poster plots.
+Styling: FILLED bars (dark grey + professional blue), bars much closer together, matching grooming behavior poster plots.
 """
 
 import numpy as np
@@ -105,7 +105,7 @@ def plot_mobility(
 ) -> plt.Figure:
     """
     Clean publication-grade bar plot: mobile fraction, psi vs ctrl.
-    FILLED bars (black + professional blue) matching grooming behavior poster style.
+    FILLED bars (dark grey + professional blue) matching grooming behavior poster style.
     Paired dots connected by lines. Significance bar. Bars much closer together.
  
     Parameters
@@ -117,8 +117,8 @@ def plot_mobility(
  
     fig, ax = plt.subplots(figsize=(7, 7))
 
-    # Professional poster colors - BLACK + PROFESSIONAL BLUE
-    COLOR_CTRL = '#000000'      # Black (saline/control)
+    # Professional poster colors - DARK GREY + PROFESSIONAL BLUE
+    COLOR_CTRL = '#4A4A4A'      # Dark grey (saline/control)
     COLOR_PSI = '#1F77B4'       # Professional blue (psi/treatment)
     OUTLINE_COLOR = '#000000'   # Black outline for both bars
 
