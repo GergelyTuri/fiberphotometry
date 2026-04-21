@@ -121,7 +121,7 @@ def plot_mobility(
     psi_outline : hex color for psilocybin outline (default: #0066CC - blue)
     """
  
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(7, 7))
 
     # Get mobile data only
     cv = ctrl_data['mobile']
@@ -212,18 +212,19 @@ def plot_mobility(
         Patch(facecolor='white', edgecolor=ctrl_outline, linewidth=3.0, label='Saline'),
         Patch(facecolor='white', edgecolor=psi_outline, linewidth=3.0, label='Psilocybin'),
     ]
-    ax.legend(handles=legend_elements, fontsize=12, frameon=True, 
+    ax.legend(handles=legend_elements, fontsize=11, frameon=True, 
               fancybox=False, edgecolor='black', framealpha=0.95)
  
-    # Clean axes
+    # Clean axes - match grooming behavior plot styling
     ax.set_xticks(x)
     ax.set_xticklabels(['Saline', 'Psilocybin'], fontsize=12, fontweight='600')
-    ax.set_ylabel(ylabel, fontsize=13, fontweight='600')
-    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13, fontweight='bold')
+    ax.set_ylabel(ylabel, fontsize=14, fontweight='600')
+    ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=14, fontweight='bold')
     ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
     ax.spines[['top', 'right']].set_visible(False)
     ax.spines[['left', 'bottom']].set_linewidth(0.8)
-    ax.tick_params(axis='both', labelsize=11)
+    ax.tick_params(axis='y', labelsize=11, length=3, width=0.8)
+    ax.tick_params(axis='x', labelsize=11, length=0)
     ax.grid(False)
     fig.tight_layout()
  
