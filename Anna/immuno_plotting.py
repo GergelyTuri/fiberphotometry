@@ -1,17 +1,11 @@
-import matplotlib.pyplot as plt
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+from scipy import stats
+
+
 def plot_area(merged_df, area_name):
-        # Remove missing sex or area rows
-    df = df.dropna(subset=["sex", "area"])
-
-    # Keep only known areas
-    area_order = ["ca1", "ca3", "hilus"]
-    df = df[df["area"].isin(area_order)].copy()
-
-    # Convert to categorical
-    df["area"] = pd.Categorical(df["area"], categories=area_order, ordered=True)
-
-    ...
     """
     Plot data for a specific brain area with group bars and sex-colored scatter points.
 
@@ -88,8 +82,6 @@ def plot_area(merged_df, area_name):
     plt.tight_layout()
     plt.show()
 
-import matplotlib.pyplot as plt
-import numpy as np
 
 def plot_bdnf_figure(df):
     """
@@ -298,16 +290,12 @@ def plot_bdnf_by_sex(df):
         plt.show()
         print(f"Saved: {sex_cfg['filename']}")
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import numpy as np
-from scipy import stats
 
 def plot_bdnf_2x2_pub(df):
     """
     2x2 publication-quality figure of BDNF per area and timepoint.
-    Matches style: tan/coral bars, open-circle sex markers, NS brackets, external legend.
+    Day 1 and Day 7 on same axis with paired Vehicle vs Psi bars.
+    Styling: black + professional blue filled bars, white dots with black edges.
     """
 
     # Clean data
@@ -317,10 +305,11 @@ def plot_bdnf_2x2_pub(df):
 
     areas = ["hilus", "ca3"]
     timepoints = ["pcb1", "pcb7"]
-    col_titles = ["Post-Drug Day 1", "Post-Drug Day 7"]
+    col_titles = ["Day 1", "Day 7"]
     row_labels = ["DG", "CA3"]
 
-    bar_colors = {"Vehicle": "#D4B896", "PSI": "#CC5533"}
+    # Professional poster colors - BLACK + PROFESSIONAL BLUE
+    bar_colors = {"Vehicle": "#000000", "PSI": "#1F77B4"}
     sex_facecolors = {"M": "white", "F": "white"}
     sex_edgecolors = {"M": "black", "F": "#E0409A"}
 
@@ -337,26 +326,29 @@ def plot_bdnf_2x2_pub(df):
             plot_df["plot_group"] = plot_df["group"].map(lambda x: "Vehicle" if x == "ctrl" else "PSI")
 
             group_order = ["Vehicle", "PSI"]
-            x_positions = {g: k for k, g in enumerate(group_order)}
+            
+            # X positions: bars MUCH closer together
+            x_positions = {"Vehicle": 0, "PSI": 0.15}
+            bar_width = 0.12
 
             summary = plot_df.groupby("plot_group")["mean/volume"].agg(["mean", "sem"]).reindex(group_order).reset_index()
 
-            # Bars
+            # Bars - FILLED with black outlines, bars very close
             for _, row in summary.iterrows():
                 ax.bar(
                     x_positions[row["plot_group"]],
                     row["mean"],
+                    bar_width,
                     yerr=row["sem"],
                     color=bar_colors[row["plot_group"]],
                     edgecolor="black",
-                    linewidth=0.8,
+                    linewidth=2.5,
                     capsize=5,
-                    width=0.55,
-                    error_kw={"elinewidth": 1.2, "capthick": 1.2}
+                    error_kw={"elinewidth": 1.5, "capthick": 2}
                 )
 
-            # Individual data points
-            jitter_strength = 0.07
+            # Individual data points - white with black edges
+            jitter_strength = 0.03
             for _, row in plot_df.iterrows():
                 xpos = x_positions[row["plot_group"]] + np.random.uniform(-jitter_strength, jitter_strength)
                 ax.scatter(
@@ -365,29 +357,32 @@ def plot_bdnf_2x2_pub(df):
                     facecolors=sex_facecolors[row["sex"]],
                     edgecolors=sex_edgecolors[row["sex"]],
                     linewidths=1.2,
-                    s=30,
+                    s=70,
                     zorder=5
                 )
 
-            # NS bracket — single clean block, no duplicates
+            # Significance bracket
             bar_top = (summary["mean"] + summary["sem"]).max()
             tick_height = bar_top * 0.04
             bracket_y = bar_top * 1.12
 
-            ax.plot([0, 1], [bracket_y, bracket_y], color="black", lw=1.2)          # horizontal line
-            ax.plot([0, 0], [bracket_y - tick_height, bracket_y], color="black", lw=1.2)  # left tick
-            ax.plot([1, 1], [bracket_y - tick_height, bracket_y], color="black", lw=1.2)  # right tick
-            ax.text(0.5, bracket_y + bar_top * 0.02, "ns", ha="center", va="bottom", fontsize=9)  # ns label
+            ax.plot([x_positions["Vehicle"], x_positions["Vehicle"], x_positions["PSI"], x_positions["PSI"]], 
+                   [bracket_y, bracket_y + tick_height, bracket_y + tick_height, bracket_y], 
+                   color="black", lw=1.2)
+            ax.text((x_positions["Vehicle"] + x_positions["PSI"]) / 2, bracket_y + tick_height + bar_top * 0.02, 
+                   "ns", ha="center", va="bottom", fontsize=9, fontweight="bold")
 
             # Axes formatting
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
-            ax.set_xticks([0, 1])
+            ax.spines["left"].set_linewidth(0.8)
+            ax.spines["bottom"].set_linewidth(0.8)
+            ax.set_xticks([x_positions["Vehicle"], x_positions["PSI"]])
             ax.set_xticklabels(["Veh", "1 mg/kg\nPSI"], fontsize=10, fontweight="bold")
-            ax.tick_params(axis="y", labelsize=10)
-            for label in ax.get_yticklabels():
-                label.set_fontweight("bold")
-            ax.set_xlim(-0.5, 1.5)
+            ax.tick_params(axis="y", labelsize=10, length=3, width=0.8)
+            ax.tick_params(axis="x", length=0)
+            ax.set_xlim(-0.15, 0.35)
+            ax.grid(False)
 
             if i == 0:
                 ax.set_title(col_titles[j], fontsize=11, fontweight="bold", pad=10)
@@ -410,17 +405,18 @@ def plot_bdnf_2x2_pub(df):
 
     # Legend
     legend_elements = [
-        mpatches.Patch(facecolor="#D4B896", edgecolor="black", label="Veh"),
-        mpatches.Patch(facecolor="#CC5533", edgecolor="black", label="1 mg/kg PSI"),
+        mpatches.Patch(facecolor=bar_colors["Vehicle"], edgecolor="black", linewidth=2.5, label="Veh"),
+        mpatches.Patch(facecolor=bar_colors["PSI"], edgecolor="black", linewidth=2.5, label="1 mg/kg PSI"),
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
                    markeredgecolor='black', markeredgewidth=1.5, markersize=7, label='Male'),
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='white',
                    markeredgecolor='#E0409A', markeredgewidth=1.5, markersize=7, label='Female'),
     ]
     fig.legend(handles=legend_elements, loc="upper right", bbox_to_anchor=(0.99, 0.88),
-               frameon=True, fontsize=9, title_fontsize=9)
+               frameon=True, fontsize=9)
 
     plt.savefig("bdnf_figure.png", dpi=150, bbox_inches="tight")
+    
     # ─── PRINT P-VALUES ───────────────────────────────────────────────────────
     print("\n" + "="*70)
     print("BDNF STATISTICAL RESULTS")
