@@ -29,10 +29,10 @@ from collections import Counter
 import itertools
 
 CONDITION_COLORS = {
-    'saline':  '#5B8DB8',
-    'vehicle': '#5B8DB8',
-    'psi':     '#C0664A',
-    'drug':    '#C0664A',
+    'saline':  '#4A4A4A',     # Dark grey
+    'vehicle': '#4A4A4A',     # Dark grey
+    'psi':     '#1F77B4',     # Professional blue
+    'drug':    '#1F77B4',     # Professional blue
 }
 BEHAVIOR_LABELS = {
     'e': 'Exploring',
@@ -114,10 +114,10 @@ def bout_duration_figure(animal_datasets, outdir='.', save=True, test='mwu'):
             ax.bar(xi, np.mean(vals),
                    yerr=scipy_sem(vals) if len(vals) > 1 else 0,
                    color=color, alpha=0.7, width=0.55, capsize=5,
-                   error_kw={'lw': 2}, zorder=2)
+                   error_kw={'lw': 2}, zorder=2, edgecolor='black', linewidth=2.0)
             jitter = np.random.default_rng(42).uniform(-0.1, 0.1, len(vals))
-            ax.scatter(xi + jitter, vals, color=color, s=50, alpha=0.85,
-                       edgecolors='white', linewidths=0.5, zorder=3)
+            ax.scatter(xi + jitter, vals, color='white', s=50, alpha=0.85,
+                       edgecolors='black', linewidths=1.2, zorder=3)
 
         # Stats
         if test and len(conditions) >= 2:
@@ -160,6 +160,7 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
     Figure layout:
       Three separate figures, one per metric.
       Each figure shows all behaviors side-by-side with paired bars (condition 1 vs condition 2).
+      Styled with grey for saline and blue for PSI.
       
     This layout is publication-ready and independent of behavior count.
     
@@ -243,6 +244,8 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
     for metric_key, metric_label, metric_fn in metrics:
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.spines[['top', 'right']].set_visible(False)
+        ax.spines['left'].set_linewidth(1.5)
+        ax.spines['bottom'].set_linewidth(1.5)
 
         # X-axis positioning: behaviors with paired bars
         n_behs = len(behaviors)
@@ -283,15 +286,15 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
             bar_mean = np.mean(vals)
             bar_err = scipy_sem(vals) if len(vals) > 1 else 0
 
-            # Bar
-            ax.bar(x_pos, bar_mean, yerr=bar_err, color=color, alpha=0.70,
+            # Bar with grey/blue fill and black border
+            ax.bar(x_pos, bar_mean, yerr=bar_err, color=color, alpha=0.9,
                    width=bar_width, capsize=5, error_kw={'lw': 2, 'capthick': 2},
-                   zorder=2)
+                   zorder=2, edgecolor='black', linewidth=2.5)
 
-            # Individual points (jitter)
+            # Individual points (white with black edges)
             jitter = np.random.default_rng(42).uniform(-0.08, 0.08, len(vals))
-            ax.scatter(x_pos + jitter, vals, color=color, s=50, alpha=0.75,
-                       edgecolors='white', linewidths=0.5, zorder=3)
+            ax.scatter(x_pos + jitter, vals, color='white', s=50, alpha=0.8,
+                       edgecolors='black', linewidths=1.2, zorder=3)
 
         # ── Add statistics (comparisons within each behavior) ────────────────
         if test and len(conditions) == 2:
@@ -324,7 +327,7 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
         x_tick_labels = [label[1] for label in x_labels]
         
         ax.set_xticks(x_tick_positions)
-        ax.set_xticklabels(x_tick_labels, fontsize=11)
+        ax.set_xticklabels(x_tick_labels, fontsize=11, fontweight='bold')
         ax.set_ylabel(metric_label, fontsize=12, fontweight='bold')
         ax.set_title(f'Behavioral Fragmentation: {metric_label}',
                      fontsize=13, fontweight='bold', pad=15)
@@ -332,16 +335,18 @@ def fragmentation_figure(animal_datasets, session_duration_s=1800.0,
         # Add legend
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor=_cond_color(conditions[0]), alpha=0.70, 
-                  label=conditions[0].capitalize()),
-            Patch(facecolor=_cond_color(conditions[1]), alpha=0.70,
-                  label=conditions[1].capitalize()),
+            Patch(facecolor=_cond_color(conditions[0]), alpha=0.9, 
+                  edgecolor='black', linewidth=2.0, label=conditions[0].capitalize()),
+            Patch(facecolor=_cond_color(conditions[1]), alpha=0.9,
+                  edgecolor='black', linewidth=2.0, label=conditions[1].capitalize()),
         ]
-        ax.legend(handles=legend_elements, fontsize=11, frameon=False, loc='upper left')
+        ax.legend(handles=legend_elements, fontsize=11, frameon=True, 
+                  edgecolor='black', framealpha=0.95, loc='upper left')
 
         # Grid for readability
         ax.yaxis.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
         ax.set_axisbelow(True)
+        ax.tick_params(axis='both', labelsize=11)
 
         # Save
         if save:
@@ -472,10 +477,10 @@ def sequence_predictability(animal_datasets, outdir='.', save=True, test='mwu'):
         ax_e.bar(xi, np.mean(vals),
                  yerr=scipy_sem(vals) if len(vals) > 1 else 0,
                  color=color, alpha=0.7, width=0.55, capsize=5,
-                 error_kw={'lw': 2}, zorder=2)
+                 error_kw={'lw': 2}, zorder=2, edgecolor='black', linewidth=2.0)
         jitter = np.random.default_rng(42).uniform(-0.1, 0.1, len(vals))
-        ax_e.scatter(xi + jitter, vals, color=color, s=50, alpha=0.85,
-                     edgecolors='white', linewidths=0.5, zorder=3)
+        ax_e.scatter(xi + jitter, vals, color='white', s=50, alpha=0.85,
+                     edgecolors='black', linewidths=1.2, zorder=3)
 
     if test and len(conditions) >= 2:
         g1 = cond_vals.get(conditions[0], np.array([]))
