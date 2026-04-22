@@ -1,4 +1,3 @@
-
 """
 mobility_serotonin.py
 ─────────────────────
@@ -146,6 +145,7 @@ def _add_significance_bar(ax, x1, x2, y, p_val, fontsize=11):
             color='black', linewidth=1.2)
     ax.text((x1 + x2) / 2, y + h * 1.3, _pval_to_stars(p_val),
             ha='center', va='bottom', fontsize=fontsize)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 3 — plot
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,14 +156,14 @@ def plot_mobile_immobile(
     title='Avg Serotonin: Mobile vs Immobile',
     ylabel='Mean Z-score',
     output_path=None,
-    ctrl_color='#A8CCEA',  # light blue for saline
-    psi_color='#2E5090',   # dark blue for psilocybin
+    ctrl_color='#4A4A4A',  # Dark grey for saline/control
+    psi_color='#1F77B4',   # Professional blue for psilocybin
 ):
     """
-    Publication-grade bar graph.
-    Saline     = light blue (ctrl_color)
-    Psilocybin = dark blue (psi_color)
-    Dots       = black with white outline, paired lines in grey.
+    Publication-grade bar graph with grey/blue styling.
+    Saline     = dark grey (#4A4A4A)
+    Psilocybin = professional blue (#1F77B4)
+    Dots       = white with black outline, paired lines in grey.
     Significance bar per category (paired t-test).
 
     Parameters
@@ -171,8 +171,8 @@ def plot_mobile_immobile(
     psi_data    : output of collect_condition_data() for psilocybin animals
     ctrl_data   : output of collect_condition_data() for control animals
     output_path : if provided, saves figure here at 300 dpi
-    ctrl_color  : hex color for saline condition (default: #A8CCEA - light blue)
-    psi_color   : hex color for psilocybin condition (default: #2E5090 - dark blue)
+    ctrl_color  : hex color for saline condition (default: #4A4A4A - dark grey)
+    psi_color   : hex color for psilocybin condition (default: #1F77B4 - blue)
     """
     from matplotlib.patches import Patch
     from scipy.stats import ttest_rel
@@ -189,17 +189,17 @@ def plot_mobile_immobile(
 
     fig, ax = plt.subplots(figsize=(7, 6))
 
-    # Bars — saline (ctrl) left, psi right (with black borders)
+    # Bars — control (ctrl) left, psi right (with black borders)
     ax.bar(x - width / 2, ctrl_means, width, yerr=ctrl_sems,
-           color=ctrl_color, edgecolor='black', linewidth=1.5,
+           color=ctrl_color, edgecolor='black', linewidth=2.5,
            label='Saline', capsize=5,
            error_kw=dict(elinewidth=2.0, ecolor='black'), zorder=2)
     ax.bar(x + width / 2, psi_means, width, yerr=psi_sems,
-           color=psi_color, edgecolor='black', linewidth=1.5,
+           color=psi_color, edgecolor='black', linewidth=2.5,
            label='Psilocybin', capsize=5,
            error_kw=dict(elinewidth=2.0, ecolor='black'), zorder=2)
 
-    # Individual dots + paired connecting lines (black with white outline)
+    # Individual dots + paired connecting lines (white with black outline)
     rng = np.random.default_rng(42)
     for i, cat in enumerate(categories):
         cv = ctrl_data[cat]
@@ -209,11 +209,11 @@ def plot_mobile_immobile(
         jp = rng.uniform(-0.04, 0.04, size=len(pv))
 
         ax.scatter(x[i] - width / 2 + jc, cv,
-                   color='black', edgecolors='white', s=75,
-                   linewidths=2.0, zorder=5)
+                   color='white', edgecolors='black', s=75,
+                   linewidths=1.2, zorder=5)
         ax.scatter(x[i] + width / 2 + jp, pv,
-                   color='black', edgecolors='white', s=75,
-                   linewidths=2.0, zorder=5)
+                   color='white', edgecolors='black', s=75,
+                   linewidths=1.2, zorder=5)
 
         n_pairs = min(len(cv), len(pv))
         for j in range(n_pairs):
@@ -235,10 +235,10 @@ def plot_mobile_immobile(
 
     # Legend
     legend_elements = [
-        Patch(facecolor=ctrl_color, edgecolor='black', linewidth=1.5, label='Saline'),
-        Patch(facecolor=psi_color, edgecolor='black', linewidth=1.5, label='Psilocybin'),
+        Patch(facecolor=ctrl_color, edgecolor='black', linewidth=2.0, label='Saline'),
+        Patch(facecolor=psi_color, edgecolor='black', linewidth=2.0, label='Psilocybin'),
     ]
-    ax.legend(handles=legend_elements, fontsize=12, frameon=False)
+    ax.legend(handles=legend_elements, fontsize=12, frameon=True, framealpha=0.95, edgecolor='black')
 
     ax.set_xticks(x)
     ax.set_xticklabels(xlabels, fontsize=13, fontweight='bold')
@@ -246,7 +246,7 @@ def plot_mobile_immobile(
     ax.set_title(f'{title}\n(threshold = {mobility_threshold} cm/s)', fontsize=13, fontweight='bold')
     ax.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.4)
     ax.spines[['top', 'right']].set_visible(False)
-    ax.spines[['left', 'bottom']].set_linewidth(1.2)
+    ax.spines[['left', 'bottom']].set_linewidth(1.5)
     ax.tick_params(axis='both', labelsize=11)
     ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] * 1.2)
     fig.tight_layout()
@@ -298,6 +298,7 @@ def plot_serotonin_velocity_overlay(
 
     # ── Plot ─────────────────────────────────────────────────────────────────
     fig = plt.figure(figsize=(14, 7))
+    from matplotlib import gridspec
     gs  = gridspec.GridSpec(2, 1, hspace=0.08)
 
     ax1 = fig.add_subplot(gs[0])  # serotonin
@@ -358,6 +359,7 @@ def plot_serotonin_velocity_overlay(
         print(f'Saved → {output_path}')
 
     return fig
+
 def plot_all_animals(
     animal_list: list[dict],
     mobility_threshold: float = 7.0,
@@ -388,7 +390,6 @@ def plot_all_animals(
             output_path        = out,
         )
         plt.show()
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # EXAMPLE USAGE
