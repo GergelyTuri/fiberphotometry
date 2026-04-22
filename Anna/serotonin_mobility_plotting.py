@@ -170,7 +170,7 @@ def plot_velocities(
     velocities,
     labels,
     title="Average Velocity Comparison",
-    xlabel="Group",
+    xlabel="Files",
     ylabel="Average Velocity",
     colors=None,
 ):
@@ -218,14 +218,14 @@ def plot_velocities(
     ax.tick_params(axis='x', labelsize=11)
     
     plt.tight_layout()
-    return fig
+    plt.show()
 
 
 def plot_distances(
     distances,
     labels,
     title="Total Distance Traveled Comparison",
-    xlabel="Group",
+    xlabel="Files",
     ylabel="Total Distance Traveled",
     colors=None,
 ):
@@ -273,4 +273,4 @@ def plot_distances(
     ax.tick_params(axis='x', labelsize=11)
     
     plt.tight_layout()
-    return fig
+    plt.show()
